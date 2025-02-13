@@ -1,10 +1,14 @@
 MODULE    = winebus.sys
 UNIXLIB   = winebus.so
 IMPORTS   = ntoskrnl hidparse
-UNIX_LIBS    = $(IOKIT_LIBS) $(UDEV_LIBS) $(PTHREAD_LIBS) $(INOTIFY_LIBS)
-UNIX_CFLAGS  = $(UDEV_CFLAGS) $(SDL2_CFLAGS)
 
-EXTRADLLFLAGS = -Wl,--subsystem,native
+UNIX_LIBS = $(IOKIT_LIBS) $(UDEV_LIBS) $(PTHREAD_LIBS) $(INOTIFY_LIBS)
+
+UNIX_CFLAGS = $(UDEV_CFLAGS) $(SDL2_CFLAGS) -I. -Iinclude \
+	-F/Applications/Xcode-beta.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks \
+	-I/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1
+
+XTRADLLFLAGS = -Wl,--subsystem,native -Wa,-x,objective-c++
 
 SOURCES = \
 	bus_iohid.c \

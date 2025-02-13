@@ -150,8 +150,8 @@ typedef GUID FMTID,*LPFMTID;
 #else
 #define REFGUID             const GUID* __MIDL_CONST
 #define REFCLSID            const CLSID* __MIDL_CONST
-#define REFIID              const IID* __MIDL_CONST
 #define REFFMTID            const FMTID* __MIDL_CONST
+#define REFIID              const IID* __MIDL_CONST
 #endif
 
 #ifdef __cplusplus

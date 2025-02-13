@@ -22,8 +22,6 @@
 extern "C" {
 #endif
 
-#include <ddk/ntifs.h>
-
 typedef struct _FLT_FILTER   *PFLT_FILTER;
 typedef struct _FLT_INSTANCE *PFLT_INSTANCE;
 typedef ULONG  FLT_CALLBACK_DATA_FLAGS;

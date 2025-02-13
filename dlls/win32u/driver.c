@@ -23,9 +23,6 @@
 #pragma makedep unix
 #endif
 
-#include <assert.h>
-#include <pthread.h>
-
 #include "ntstatus.h"
 #define WIN32_NO_STATUS
 #include "ntgdi_private.h"

@@ -6808,8 +6808,8 @@ UINT font_init(void)
     if (!dpi) return 96;
     update_codepage( dpi );
 
-    if (!(font_funcs = init_freetype_lib()))
-        return dpi;
+    // if (!(font_funcs = init_freetype_lib()))
+    //    return dpi;
 
     load_system_bitmap_fonts();
     load_file_system_fonts();

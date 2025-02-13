@@ -24,13 +24,7 @@
 
 #include "config.h"
 
-#define LoadResource __carbon_LoadResource
-#define CompareString __carbon_CompareString
-#define GetCurrentThread __carbon_GetCurrentThread
-#define GetCurrentProcess __carbon_GetCurrentProcess
-
 #include <stdarg.h>
-
 #include <errno.h>
 #include <limits.h>
 #include <stdio.h>
@@ -42,17 +36,6 @@
 #include <fcntl.h>
 #include <fenv.h>
 #include <unistd.h>
-
-#include <CoreAudio/CoreAudio.h>
-#include <AudioToolbox/AudioFormat.h>
-#include <AudioToolbox/AudioConverter.h>
-#include <AudioUnit/AudioUnit.h>
-
-#undef LoadResource
-#undef CompareString
-#undef GetCurrentThread
-#undef GetCurrentProcess
-#undef _CDECL
 
 #include "ntstatus.h"
 #define WIN32_NO_STATUS
@@ -67,7 +50,21 @@
 #include "wine/debug.h"
 #include "wine/unixlib.h"
 
-#include "unixlib.h"
+#define LoadResource __carbon_LoadResource
+#define CompareString __carbon_CompareString
+#define GetCurrentThread __carbon_GetCurrentThread
+#define GetCurrentProcess __carbon_GetCurrentProcess
+
+#include <CoreAudio/CoreAudio.h>
+#include <AudioToolbox/AudioFormat.h>
+#include <AudioToolbox/AudioConverter.h>
+#include <AudioUnit/AudioUnit.h>
+
+#undef LoadResource
+#undef CompareString
+#undef GetCurrentThread
+#undef GetCurrentProcess
+#undef _CDECL
 
 #if !defined(MAC_OS_VERSION_12_0) || MAC_OS_X_VERSION_MAX_ALLOWED < MAC_OS_VERSION_12_0
 #define kAudioObjectPropertyElementMain kAudioObjectPropertyElementMaster
@@ -115,7 +112,7 @@ static const REFERENCE_TIME min_period = 50000;
 
 static ULONG_PTR zero_bits = 0;
 
-static NTSTATUS unix_not_implemented(void *args)
+static NTSTATUS unix_not_implemented(LPCSTR args)
 {
     return STATUS_SUCCESS;
 }
@@ -208,7 +205,7 @@ static BOOL device_has_channels(AudioDeviceID device, EDataFlow flow)
     return ret;
 }
 
-static NTSTATUS unix_process_attach(void *args)
+static NTSTATUS unix_process_attach(LPCSTR args)
 {
 #ifdef _WIN64
     if (NtCurrentTeb()->WowTebOffset)
@@ -222,14 +219,14 @@ static NTSTATUS unix_process_attach(void *args)
     return STATUS_SUCCESS;
 }
 
-static NTSTATUS unix_main_loop(void *args)
+static NTSTATUS unix_main_loop(LPCSTR args)
 {
     struct main_loop_params *params = args;
-    NtSetEvent(params->event, NULL);
+    NtSetEvent((*params)->event, NULL);
     return STATUS_SUCCESS;
 }
 
-static NTSTATUS unix_get_endpoint_ids(void *args)
+static NTSTATUS unix_get_endpoint_ids(LPCSTR args)
 {
     struct get_endpoint_ids_params *params = args;
     unsigned int num_devices, i, needed, offset;
@@ -246,15 +243,15 @@ static NTSTATUS unix_get_endpoint_ids(void *args)
     OSStatus sc;
     UniChar *ptr;
 
-    params->num = 0;
-    params->default_idx = 0;
+    (*params)->num = 0;
+    (*params)->default_idx = 0;
 
     addr.mScope = kAudioObjectPropertyScopeGlobal;
     addr.mElement = kAudioObjectPropertyElementMain;
-    if(params->flow == eRender) addr.mSelector = kAudioHardwarePropertyDefaultOutputDevice;
-    else if(params->flow == eCapture) addr.mSelector = kAudioHardwarePropertyDefaultInputDevice;
+    if((*params)->flow == eRender) addr.mSelector = kAudioHardwarePropertyDefaultOutputDevice;
+    else if((*params)->flow == eCapture) addr.mSelector = kAudioHardwarePropertyDefaultInputDevice;
     else{
-        params->result = E_INVALIDARG;
+        (*params)->result = E_INVALIDARG;
         return STATUS_SUCCESS;
     }
 
@@ -269,7 +266,7 @@ static NTSTATUS unix_get_endpoint_ids(void *args)
     sc = AudioObjectGetPropertyDataSize(kAudioObjectSystemObject, &addr, 0, NULL, &devsize);
     if(sc != noErr){
         WARN("Getting _Devices property size failed: %x\n", (int)sc);
-        params->result = osstatus_to_hresult(sc);
+        (*params)->result = osstatus_to_hresult(sc);
         return STATUS_SUCCESS;
     }
 
@@ -279,7 +276,7 @@ static NTSTATUS unix_get_endpoint_ids(void *args)
     if(!devices || !info){
         free(info);
         free(devices);
-        params->result = E_OUTOFMEMORY;
+        (*params)->result = E_OUTOFMEMORY;
         return STATUS_SUCCESS;
     }
 
@@ -288,19 +285,19 @@ static NTSTATUS unix_get_endpoint_ids(void *args)
         WARN("Getting _Devices property failed: %x\n", (int)sc);
         free(info);
         free(devices);
-        params->result = osstatus_to_hresult(sc);
+        (*params)->result = osstatus_to_hresult(sc);
         return STATUS_SUCCESS;
     }
 
-    addr.mScope = get_scope(params->flow);
+    addr.mScope = get_scope((*params)->flow);
     addr.mElement = 0;
 
     for(i = 0; i < num_devices; i++){
-        if(!device_has_channels(devices[i], params->flow)) continue;
+        if(!device_has_channels(devices[i], (*params)->flow)) continue;
 
         addr.mSelector = kAudioObjectPropertyName;
         size = sizeof(CFStringRef);
-        sc = AudioObjectGetPropertyData(devices[i], &addr, 0, NULL, &size, &info[params->num].name);
+        sc = AudioObjectGetPropertyData(devices[i], &addr, 0, NULL, &size, &info[(*params)->num].name);
         if(sc != noErr){
             WARN("Unable to get _Name property for device %u: %x\n",
                  (unsigned int)devices[i], (int)sc);
@@ -309,21 +306,21 @@ static NTSTATUS unix_get_endpoint_ids(void *args)
 
         addr.mSelector = kAudioDevicePropertyDeviceUID;
         size = sizeof(CFStringRef);
-        sc = AudioObjectGetPropertyData(devices[i], &addr, 0, NULL, &size, &info[params->num].uid);
+        sc = AudioObjectGetPropertyData(devices[i], &addr, 0, NULL, &size, &info[(*params)->num].uid);
         if(sc != noErr){
             WARN("Unable to get UID property for device %u: %x\n",
                  (unsigned int)devices[i], (int)sc);
             continue;
         }
 
-        info[params->num++].id = devices[i];
+        info[(*params)->num++].id = devices[i];
     }
     free(devices);
 
-    offset = needed = sizeof(*endpoint) * params->num;
-    endpoint = params->endpoints;
+    offset = needed = sizeof(*endpoint) * (*params)->num;
+    endpoint = (*params)->endpoints;
 
-    for(i = 0; i < params->num; i++){
+    for(i = 0; i < (*params)->num; i++){
         const SIZE_T name_len = CFStringGetLength(info[i].name) + 1;
         CFIndex device_len;
 
@@ -333,32 +330,32 @@ static NTSTATUS unix_get_endpoint_ids(void *args)
 
         needed += name_len * sizeof(WCHAR) + ((device_len + 1) & ~1);
 
-        if(needed <= params->size){
+        if(needed <= (*params)->size){
             endpoint->name = offset;
-            ptr = (UniChar *)((char *)params->endpoints + offset);
+            ptr = (UniChar *)((char *)(*params)->endpoints + offset);
             CFStringGetCharacters(info[i].name, CFRangeMake(0, name_len - 1), ptr);
             ptr[name_len - 1] = 0;
             offset += name_len * sizeof(WCHAR);
 
             endpoint->device = offset;
             CFStringGetBytes(info[i].uid, CFRangeMake(0, CFStringGetLength(info[i].uid)), kCFStringEncodingUTF8,
-                             0, false, (UInt8 *)params->endpoints + offset, params->size - offset, NULL);
-            ((char *)params->endpoints)[offset + device_len - 1] = '\0';
+                             0, false, (UInt8 *)(*params)->endpoints + offset, (*params)->size - offset, NULL);
+            ((char *)(*params)->endpoints)[offset + device_len - 1] = '\0';
             offset += (device_len + 1) & ~1;
 
             endpoint++;
         }
         CFRelease(info[i].name);
         CFRelease(info[i].uid);
-        if(info[i].id == default_id) params->default_idx = i;
+        if(info[i].id == default_id) (*params)->default_idx = i;
     }
     free(info);
 
-    if(needed > params->size){
-        params->size = needed;
-        params->result = HRESULT_FROM_WIN32(ERROR_INSUFFICIENT_BUFFER);
+    if(needed > (*params)->size){
+        (*params)->size = needed;
+        (*params)->result = HRESULT_FROM_WIN32(ERROR_INSUFFICIENT_BUFFER);
     }
-    else params->result = S_OK;
+    else (*params)->result = S_OK;
 
     return STATUS_SUCCESS;
 }
@@ -715,7 +712,7 @@ static AudioDeviceID dev_id_from_device(const char *device)
     return id;
 }
 
-static NTSTATUS unix_create_stream(void *args)
+static NTSTATUS unix_create_stream(LPCSTR args)
 {
     struct create_stream_params *params = args;
     struct coreaudio_stream *stream;
@@ -723,37 +720,37 @@ static NTSTATUS unix_create_stream(void *args)
     OSStatus sc;
     SIZE_T size;
 
-    params->result = S_OK;
+    (*params)->result = S_OK;
 
     if (!(stream = calloc(1, sizeof(*stream)))) {
-        params->result = E_OUTOFMEMORY;
+        (*params)->result = E_OUTOFMEMORY;
         return STATUS_SUCCESS;
     }
 
-    stream->fmt = clone_format(params->fmt);
+    stream->fmt = clone_format((*params)->fmt);
     if(!stream->fmt){
-        params->result = E_OUTOFMEMORY;
+        (*params)->result = E_OUTOFMEMORY;
         goto end;
     }
 
-    stream->period = params->period;
-    stream->period_frames = muldiv(params->period, stream->fmt->nSamplesPerSec, 10000000);
-    stream->dev_id = dev_id_from_device(params->device);
-    stream->flow = params->flow;
-    stream->flags = params->flags;
-    stream->share = params->share;
+    stream->period = (*params)->period;
+    stream->period_frames = muldiv((*params)->period, stream->fmt->nSamplesPerSec, 10000000);
+    stream->dev_id = dev_id_from_device((*params)->device);
+    stream->flow = (*params)->flow;
+    stream->flags = (*params)->flags;
+    stream->share = (*params)->share;
 
-    stream->bufsize_frames = muldiv(params->duration, stream->fmt->nSamplesPerSec, 10000000);
-    if(params->share == AUDCLNT_SHAREMODE_EXCLUSIVE)
+    stream->bufsize_frames = muldiv((*params)->duration, stream->fmt->nSamplesPerSec, 10000000);
+    if((*params)->share == AUDCLNT_SHAREMODE_EXCLUSIVE)
         stream->bufsize_frames -= stream->bufsize_frames % stream->period_frames;
 
     if(!(stream->unit = get_audiounit(stream->flow, stream->dev_id))){
-        params->result = AUDCLNT_E_DEVICE_INVALIDATED;
+        (*params)->result = AUDCLNT_E_DEVICE_INVALIDATED;
         goto end;
     }
 
-    params->result = ca_setup_audiounit(stream->flow, stream->unit, stream->fmt, &stream->dev_desc, &stream->converter);
-    if(FAILED(params->result)) goto end;
+    (*params)->result = ca_setup_audiounit(stream->flow, stream->unit, stream->fmt, &stream->dev_desc, &stream->converter);
+    if(FAILED((*params)->result)) goto end;
 
     input.inputProcRefCon = stream;
     if(stream->flow == eCapture){
@@ -767,14 +764,14 @@ static NTSTATUS unix_create_stream(void *args)
     }
     if(sc != noErr){
         WARN("Couldn't set callback: %x\n", (int)sc);
-        params->result = osstatus_to_hresult(sc);
+        (*params)->result = osstatus_to_hresult(sc);
         goto end;
     }
 
     sc = AudioUnitInitialize(stream->unit);
     if(sc != noErr){
         WARN("Couldn't initialize: %x\n", (int)sc);
-        params->result = osstatus_to_hresult(sc);
+        (*params)->result = osstatus_to_hresult(sc);
         goto end;
     }
 
@@ -783,33 +780,33 @@ static NTSTATUS unix_create_stream(void *args)
     sc = AudioOutputUnitStart(stream->unit);
     if(sc != noErr){
         WARN("Unit failed to start: %x\n", (int)sc);
-        params->result = osstatus_to_hresult(sc);
+        (*params)->result = osstatus_to_hresult(sc);
         goto end;
     }
 
     size = stream->bufsize_frames * stream->fmt->nBlockAlign;
     if(NtAllocateVirtualMemory(GetCurrentProcess(), (void **)&stream->local_buffer, zero_bits,
                                &size, MEM_COMMIT, PAGE_READWRITE)){
-        params->result = E_OUTOFMEMORY;
+        (*params)->result = E_OUTOFMEMORY;
         goto end;
     }
     silence_buffer(stream, stream->local_buffer, stream->bufsize_frames);
 
     if(stream->flow == eCapture){
-        stream->cap_bufsize_frames = muldiv(params->duration, stream->dev_desc.mSampleRate, 10000000);
+        stream->cap_bufsize_frames = muldiv((*params)->duration, stream->dev_desc.mSampleRate, 10000000);
         stream->cap_buffer = malloc(stream->cap_bufsize_frames * stream->fmt->nBlockAlign);
     }
-    params->result = S_OK;
+    (*params)->result = S_OK;
 
 end:
-    if(FAILED(params->result)){
+    if(FAILED((*params)->result)){
         if(stream->converter) AudioConverterDispose(stream->converter);
         if(stream->unit) AudioComponentInstanceDispose(stream->unit);
         free(stream->fmt);
         free(stream);
     } else {
-        *params->channel_count = params->fmt->nChannels;
-        *params->stream = (stream_handle)(UINT_PTR)stream;
+        (*params).channel_count = (*params)->fmt->nChannels;
+        (*params).stream = (stream_handle)(UINT_PTR)stream;
     }
 
     return STATUS_SUCCESS;
@@ -818,13 +815,13 @@ end:
 static NTSTATUS unix_release_stream( void *args )
 {
     struct release_stream_params *params = args;
-    struct coreaudio_stream *stream = handle_get_stream(params->stream);
+    struct coreaudio_stream *stream = handle_get_stream((*params)->stream);
     SIZE_T size;
 
-    if(params->timer_thread){
+    if((*params)->timer_thread){
         stream->please_quit = TRUE;
-        NtWaitForSingleObject(params->timer_thread, FALSE, NULL);
-        NtClose(params->timer_thread);
+        NtWaitForSingleObject((*params)->timer_thread, FALSE, NULL);
+        NtClose((*params)->timer_thread);
     }
 
     if(stream->unit){
@@ -848,7 +845,7 @@ static NTSTATUS unix_release_stream( void *args )
     }
     free(stream->fmt);
     free(stream);
-    params->result = S_OK;
+    (*params)->result = S_OK;
     return STATUS_SUCCESS;
 }
 
@@ -995,7 +992,7 @@ static DWORD get_channel_mask(unsigned int channels)
     return 0;
 }
 
-static NTSTATUS unix_get_mix_format(void *args)
+static NTSTATUS unix_get_mix_format(LPCSTR args)
 {
     struct get_mix_format_params *params = args;
     AudioObjectPropertyAddress addr;
@@ -1005,11 +1002,11 @@ static NTSTATUS unix_get_mix_format(void *args)
     UInt32 size;
     OSStatus sc;
     int i;
-    const AudioDeviceID dev_id = dev_id_from_device(params->device);
+    const AudioDeviceID dev_id = dev_id_from_device((*params)->device);
 
-    params->fmt->Format.wFormatTag = WAVE_FORMAT_EXTENSIBLE;
+    (*params)->fmt->Format.wFormatTag = WAVE_FORMAT_EXTENSIBLE;
 
-    addr.mScope = get_scope(params->flow);
+    addr.mScope = get_scope((*params)->flow);
     addr.mElement = 0;
     addr.mSelector = kAudioDevicePropertyPreferredChannelLayout;
 
@@ -1023,38 +1020,38 @@ static NTSTATUS unix_get_mix_format(void *args)
                   (unsigned int)layout->mNumberChannelDescriptions);
 
             if(layout->mChannelLayoutTag == kAudioChannelLayoutTag_UseChannelDescriptions){
-                convert_channel_layout(layout, params->fmt);
+                convert_channel_layout(layout, (*params)->fmt);
             }else{
                 WARN("Haven't implemented support for this layout tag: 0x%x, guessing at layout\n",
                      (unsigned int)layout->mChannelLayoutTag);
-                params->fmt->Format.nChannels = 0;
+                (*params)->fmt->Format.nChannels = 0;
             }
         }else{
             TRACE("Unable to get _PreferredChannelLayout property: %x, guessing at layout\n", (int)sc);
-            params->fmt->Format.nChannels = 0;
+            (*params)->fmt->Format.nChannels = 0;
         }
 
         free(layout);
     }else{
         TRACE("Unable to get size for _PreferredChannelLayout property: %x, guessing at layout\n", (int)sc);
-        params->fmt->Format.nChannels = 0;
+        (*params)->fmt->Format.nChannels = 0;
     }
 
-    if(params->fmt->Format.nChannels == 0){
-        addr.mScope = get_scope(params->flow);
+    if((*params)->fmt->Format.nChannels == 0){
+        addr.mScope = get_scope((*params)->flow);
         addr.mElement = 0;
         addr.mSelector = kAudioDevicePropertyStreamConfiguration;
 
         sc = AudioObjectGetPropertyDataSize(dev_id, &addr, 0, NULL, &size);
         if(sc != noErr){
             WARN("Unable to get size for _StreamConfiguration property: %x\n", (int)sc);
-            params->result = osstatus_to_hresult(sc);
+            (*params)->result = osstatus_to_hresult(sc);
             return STATUS_SUCCESS;
         }
 
         buffers = malloc(size);
         if(!buffers){
-            params->result = E_OUTOFMEMORY;
+            (*params)->result = E_OUTOFMEMORY;
             return STATUS_SUCCESS;
         }
 
@@ -1062,16 +1059,16 @@ static NTSTATUS unix_get_mix_format(void *args)
         if(sc != noErr){
             free(buffers);
             WARN("Unable to get _StreamConfiguration property: %x\n", (int)sc);
-            params->result = osstatus_to_hresult(sc);
+            (*params)->result = osstatus_to_hresult(sc);
             return STATUS_SUCCESS;
         }
 
         for(i = 0; i < buffers->mNumberBuffers; ++i)
-            params->fmt->Format.nChannels += buffers->mBuffers[i].mNumberChannels;
+            (*params)->fmt->Format.nChannels += buffers->mBuffers[i].mNumberChannels;
 
         free(buffers);
 
-        params->fmt->dwChannelMask = get_channel_mask(params->fmt->Format.nChannels);
+        (*params)->fmt->dwChannelMask = get_channel_mask((*params)->fmt->Format.nChannels);
     }
 
     addr.mSelector = kAudioDevicePropertyNominalSampleRate;
@@ -1079,100 +1076,100 @@ static NTSTATUS unix_get_mix_format(void *args)
     sc = AudioObjectGetPropertyData(dev_id, &addr, 0, NULL, &size, &rate);
     if(sc != noErr){
         WARN("Unable to get _NominalSampleRate property: %x\n", (int)sc);
-        params->result = osstatus_to_hresult(sc);
+        (*params)->result = osstatus_to_hresult(sc);
         return STATUS_SUCCESS;
     }
-    params->fmt->Format.nSamplesPerSec = rate;
+    (*params)->fmt->Format.nSamplesPerSec = rate;
 
-    params->fmt->Format.wBitsPerSample = 32;
-    params->fmt->SubFormat = KSDATAFORMAT_SUBTYPE_IEEE_FLOAT;
+    (*params)->fmt->Format.wBitsPerSample = 32;
+    (*params)->fmt->SubFormat = KSDATAFORMAT_SUBTYPE_IEEE_FLOAT;
 
-    params->fmt->Format.nBlockAlign = (params->fmt->Format.wBitsPerSample *
-                                       params->fmt->Format.nChannels) / 8;
-    params->fmt->Format.nAvgBytesPerSec = params->fmt->Format.nSamplesPerSec *
-        params->fmt->Format.nBlockAlign;
+    (*params)->fmt->Format.nBlockAlign = ((*params)->fmt->Format.wBitsPerSample *
+                                       (*params)->fmt->Format.nChannels) / 8;
+    (*params)->fmt->Format.nAvgBytesPerSec = (*params)->fmt->Format.nSamplesPerSec *
+        (*params)->fmt->Format.nBlockAlign;
 
-    params->fmt->Samples.wValidBitsPerSample = params->fmt->Format.wBitsPerSample;
-    params->fmt->Format.cbSize = sizeof(WAVEFORMATEXTENSIBLE) - sizeof(WAVEFORMATEX);
-    params->result = S_OK;
+    (*params)->fmt->Samples.wValidBitsPerSample = (*params)->fmt->Format.wBitsPerSample;
+    (*params)->fmt->Format.cbSize = sizeof(WAVEFORMATEXTENSIBLE) - sizeof(WAVEFORMATEX);
+    (*params)->result = S_OK;
     return STATUS_SUCCESS;
 }
 
-static NTSTATUS unix_is_format_supported(void *args)
+static NTSTATUS unix_is_format_supported(LPCSTR args)
 {
     struct is_format_supported_params *params = args;
-    const WAVEFORMATEXTENSIBLE *fmtex = (const WAVEFORMATEXTENSIBLE *)params->fmt_in;
+    const WAVEFORMATEXTENSIBLE *fmtex = (const WAVEFORMATEXTENSIBLE *)(*params)->fmt_in;
     AudioStreamBasicDescription dev_desc;
     AudioConverterRef converter;
     AudioComponentInstance unit;
-    const AudioDeviceID dev_id = dev_id_from_device(params->device);
+    const AudioDeviceID dev_id = dev_id_from_device((*params)->device);
 
-    params->result = S_OK;
+    (*params)->result = S_OK;
 
-    if(!params->fmt_in || (params->share == AUDCLNT_SHAREMODE_SHARED && !params->fmt_out))
-        params->result = E_POINTER;
-    else if(params->share != AUDCLNT_SHAREMODE_SHARED && params->share != AUDCLNT_SHAREMODE_EXCLUSIVE)
-        params->result = E_INVALIDARG;
-    else if(params->fmt_in->wFormatTag == WAVE_FORMAT_EXTENSIBLE){
-        if(params->fmt_in->cbSize < sizeof(WAVEFORMATEXTENSIBLE) - sizeof(WAVEFORMATEX))
-            params->result = E_INVALIDARG;
-        else if(params->fmt_in->nAvgBytesPerSec == 0 || params->fmt_in->nBlockAlign == 0 ||
-                fmtex->Samples.wValidBitsPerSample > params->fmt_in->wBitsPerSample)
-            params->result = E_INVALIDARG;
-        else if(fmtex->Samples.wValidBitsPerSample < params->fmt_in->wBitsPerSample)
+    if(!(*params)->fmt_in || ((*params)->share == AUDCLNT_SHAREMODE_SHARED && !(*params)->fmt_out))
+        (*params)->result = E_POINTER;
+    else if((*params)->share != AUDCLNT_SHAREMODE_SHARED && (*params)->share != AUDCLNT_SHAREMODE_EXCLUSIVE)
+        (*params)->result = E_INVALIDARG;
+    else if((*params)->fmt_in->wFormatTag == WAVE_FORMAT_EXTENSIBLE){
+        if((*params)->fmt_in->cbSize < sizeof(WAVEFORMATEXTENSIBLE) - sizeof(WAVEFORMATEX))
+            (*params)->result = E_INVALIDARG;
+        else if((*params)->fmt_in->nAvgBytesPerSec == 0 || (*params)->fmt_in->nBlockAlign == 0 ||
+                fmtex->Samples.wValidBitsPerSample > (*params)->fmt_in->wBitsPerSample)
+            (*params)->result = E_INVALIDARG;
+        else if(fmtex->Samples.wValidBitsPerSample < (*params)->fmt_in->wBitsPerSample)
             goto unsupported;
-        else if(params->share == AUDCLNT_SHAREMODE_EXCLUSIVE &&
+        else if((*params)->share == AUDCLNT_SHAREMODE_EXCLUSIVE &&
                 (fmtex->dwChannelMask == 0 || fmtex->dwChannelMask & SPEAKER_RESERVED))
             goto unsupported;
     }
-    if(FAILED(params->result)) return STATUS_SUCCESS;
+    if(FAILED((*params)->result)) return STATUS_SUCCESS;
 
-    if(params->fmt_in->nBlockAlign != params->fmt_in->nChannels * params->fmt_in->wBitsPerSample / 8 ||
-       params->fmt_in->nAvgBytesPerSec != params->fmt_in->nBlockAlign * params->fmt_in->nSamplesPerSec)
+    if((*params)->fmt_in->nBlockAlign != (*params)->fmt_in->nChannels * (*params)->fmt_in->wBitsPerSample / 8 ||
+       (*params)->fmt_in->nAvgBytesPerSec != (*params)->fmt_in->nBlockAlign * (*params)->fmt_in->nSamplesPerSec)
         goto unsupported;
 
-    if(params->fmt_in->nChannels == 0){
-        params->result = AUDCLNT_E_UNSUPPORTED_FORMAT;
+    if((*params)->fmt_in->nChannels == 0){
+        (*params)->result = AUDCLNT_E_UNSUPPORTED_FORMAT;
         return STATUS_SUCCESS;
     }
-    unit = get_audiounit(params->flow, dev_id);
+    unit = get_audiounit((*params)->flow, dev_id);
 
     converter = NULL;
-    params->result = ca_setup_audiounit(params->flow, unit, params->fmt_in, &dev_desc, &converter);
+    (*params)->result = ca_setup_audiounit((*params)->flow, unit, (*params)->fmt_in, &dev_desc, &converter);
     AudioComponentInstanceDispose(unit);
-    if(FAILED(params->result)) goto unsupported;
+    if(FAILED((*params)->result)) goto unsupported;
     if(converter) AudioConverterDispose(converter);
 
-    params->result = S_OK;
+    (*params)->result = S_OK;
     return STATUS_SUCCESS;
 
 unsupported:
-    if(params->fmt_out){
+    if((*params)->fmt_out){
         struct get_mix_format_params get_mix_params =
         {
-            .device = params->device,
-            .flow = params->flow,
-            .fmt = params->fmt_out,
+            .device = (*params)->device,
+            .flow = (*params)->flow,
+            .fmt = (*params)->fmt_out,
         };
 
         unix_get_mix_format(&get_mix_params);
-        params->result = get_mix_params.result;
-        if(SUCCEEDED(params->result)) params->result = S_FALSE;
+        (*params)->result = get_mix_params.result;
+        if(SUCCEEDED((*params)->result)) (*params)->result = S_FALSE;
     }
-    else params->result = AUDCLNT_E_UNSUPPORTED_FORMAT;
+    else (*params)->result = AUDCLNT_E_UNSUPPORTED_FORMAT;
     return STATUS_SUCCESS;
 }
 
-static NTSTATUS unix_get_device_period(void *args)
+static NTSTATUS unix_get_device_period(LPCSTR args)
 {
     struct get_device_period_params *params = args;
 
-    if (params->def_period)
-        *params->def_period = def_period;
-    if (params->min_period)
-        *params->min_period = min_period;
+    if ((*params)->def_period)
+        (*params).def_period = def_period;
+    if ((*params)->min_period)
+        (*params).min_period = min_period;
 
-    params->result = S_OK;
+    (*params)->result = S_OK;
 
     return STATUS_SUCCESS;
 }
@@ -1277,15 +1274,15 @@ static void capture_resample(struct coreaudio_stream *stream)
     }
 }
 
-static NTSTATUS unix_get_buffer_size(void *args)
+static NTSTATUS unix_get_buffer_size(LPCSTR args)
 {
     struct get_buffer_size_params *params = args;
-    struct coreaudio_stream *stream = handle_get_stream(params->stream);
+    struct coreaudio_stream *stream = handle_get_stream((*params)->stream);
 
     os_unfair_lock_lock(&stream->lock);
-    *params->frames = stream->bufsize_frames;
+    (*params).frames = stream->bufsize_frames;
     os_unfair_lock_unlock(&stream->lock);
-    params->result = S_OK;
+    (*params)->result = S_OK;
     return STATUS_SUCCESS;
 }
 
@@ -1341,10 +1338,10 @@ static HRESULT ca_get_max_stream_latency(struct coreaudio_stream *stream, UInt32
     return S_OK;
 }
 
-static NTSTATUS unix_get_latency(void *args)
+static NTSTATUS unix_get_latency(LPCSTR args)
 {
     struct get_latency_params *params = args;
-    struct coreaudio_stream *stream = handle_get_stream(params->stream);
+    struct coreaudio_stream *stream = handle_get_stream((*params)->stream);
     UInt32 latency, stream_latency, size;
     AudioObjectPropertyAddress addr;
     OSStatus sc;
@@ -1360,12 +1357,12 @@ static NTSTATUS unix_get_latency(void *args)
     if(sc != noErr){
         WARN("Couldn't get _Latency property: %x\n", (int)sc);
         os_unfair_lock_unlock(&stream->lock);
-        params->result = osstatus_to_hresult(sc);
+        (*params)->result = osstatus_to_hresult(sc);
         return STATUS_SUCCESS;
     }
 
-    params->result = ca_get_max_stream_latency(stream, &stream_latency);
-    if(FAILED(params->result)){
+    (*params)->result = ca_get_max_stream_latency(stream, &stream_latency);
+    if(FAILED((*params)->result)){
         os_unfair_lock_unlock(&stream->lock);
         return STATUS_SUCCESS;
     }
@@ -1373,10 +1370,10 @@ static NTSTATUS unix_get_latency(void *args)
     latency += stream_latency;
     /* pretend we process audio in Period chunks, so max latency includes
      * the period time */
-    *params->latency = muldiv(latency, 10000000, stream->fmt->nSamplesPerSec) + stream->period;
+    (*params).latency = muldiv(latency, 10000000, stream->fmt->nSamplesPerSec) + stream->period;
 
     os_unfair_lock_unlock(&stream->lock);
-    params->result = S_OK;
+    (*params)->result = S_OK;
     return STATUS_SUCCESS;
 }
 
@@ -1386,32 +1383,32 @@ static UINT32 get_current_padding_nolock(struct coreaudio_stream *stream)
     return stream->held_frames;
 }
 
-static NTSTATUS unix_get_current_padding(void *args)
+static NTSTATUS unix_get_current_padding(LPCSTR args)
 {
     struct get_current_padding_params *params = args;
-    struct coreaudio_stream *stream = handle_get_stream(params->stream);
+    struct coreaudio_stream *stream = handle_get_stream((*params)->stream);
 
     os_unfair_lock_lock(&stream->lock);
-    *params->padding = get_current_padding_nolock(stream);
+    (*params).padding = get_current_padding_nolock(stream);
     os_unfair_lock_unlock(&stream->lock);
-    params->result = S_OK;
+    (*params)->result = S_OK;
     return STATUS_SUCCESS;
 }
 
-static NTSTATUS unix_start(void *args)
+static NTSTATUS unix_start(LPCSTR args)
 {
     struct start_params *params = args;
-    struct coreaudio_stream *stream = handle_get_stream(params->stream);
+    struct coreaudio_stream *stream = handle_get_stream((*params)->stream);
 
     os_unfair_lock_lock(&stream->lock);
 
     if((stream->flags & AUDCLNT_STREAMFLAGS_EVENTCALLBACK) && !stream->event)
-        params->result = AUDCLNT_E_EVENTHANDLE_NOT_SET;
+        (*params)->result = AUDCLNT_E_EVENTHANDLE_NOT_SET;
     else if(stream->playing)
-        params->result = AUDCLNT_E_NOT_STOPPED;
+        (*params)->result = AUDCLNT_E_NOT_STOPPED;
     else{
         stream->playing = TRUE;
-        params->result = S_OK;
+        (*params)->result = S_OK;
     }
 
     os_unfair_lock_unlock(&stream->lock);
@@ -1419,18 +1416,18 @@ static NTSTATUS unix_start(void *args)
     return STATUS_SUCCESS;
 }
 
-static NTSTATUS unix_stop(void *args)
+static NTSTATUS unix_stop(LPCSTR args)
 {
     struct stop_params *params = args;
-    struct coreaudio_stream *stream = handle_get_stream(params->stream);
+    struct coreaudio_stream *stream = handle_get_stream((*params)->stream);
 
     os_unfair_lock_lock(&stream->lock);
 
     if(!stream->playing)
-        params->result = S_FALSE;
+        (*params)->result = S_FALSE;
     else{
         stream->playing = FALSE;
-        params->result = S_OK;
+        (*params)->result = S_OK;
     }
 
     os_unfair_lock_unlock(&stream->lock);
@@ -1438,17 +1435,17 @@ static NTSTATUS unix_stop(void *args)
     return STATUS_SUCCESS;
 }
 
-static NTSTATUS unix_reset(void *args)
+static NTSTATUS unix_reset(LPCSTR args)
 {
     struct reset_params *params = args;
-    struct coreaudio_stream *stream = handle_get_stream(params->stream);
+    struct coreaudio_stream *stream = handle_get_stream((*params)->stream);
 
     os_unfair_lock_lock(&stream->lock);
 
     if(stream->playing)
-        params->result = AUDCLNT_E_NOT_STOPPED;
+        (*params)->result = AUDCLNT_E_NOT_STOPPED;
     else if(stream->getbuf_last)
-        params->result = AUDCLNT_E_BUFFER_OPERATION_PENDING;
+        (*params)->result = AUDCLNT_E_BUFFER_OPERATION_PENDING;
     else{
         if(stream->flow == eRender)
             stream->written_frames = 0;
@@ -1459,17 +1456,17 @@ static NTSTATUS unix_reset(void *args)
         stream->wri_offs_frames = 0;
         stream->cap_offs_frames = 0;
         stream->cap_held_frames = 0;
-        params->result = S_OK;
+        (*params)->result = S_OK;
     }
 
     os_unfair_lock_unlock(&stream->lock);
     return STATUS_SUCCESS;
 }
 
-static NTSTATUS unix_timer_loop(void *args)
+static NTSTATUS unix_timer_loop(LPCSTR args)
 {
     struct timer_loop_params *params = args;
-    struct coreaudio_stream *stream = handle_get_stream(params->stream);
+    struct coreaudio_stream *stream = handle_get_stream((*params)->stream);
     LARGE_INTEGER delay, next, last;
     int adjust;
 
@@ -1495,10 +1492,10 @@ static NTSTATUS unix_timer_loop(void *args)
     return STATUS_SUCCESS;
 }
 
-static NTSTATUS unix_get_render_buffer(void *args)
+static NTSTATUS unix_get_render_buffer(LPCSTR args)
 {
     struct get_render_buffer_params *params = args;
-    struct coreaudio_stream *stream = handle_get_stream(params->stream);
+    struct coreaudio_stream *stream = handle_get_stream((*params)->stream);
     SIZE_T size;
     UINT32 pad;
 
@@ -1507,44 +1504,44 @@ static NTSTATUS unix_get_render_buffer(void *args)
     pad = get_current_padding_nolock(stream);
 
     if(stream->getbuf_last){
-        params->result = AUDCLNT_E_OUT_OF_ORDER;
+        (*params)->result = AUDCLNT_E_OUT_OF_ORDER;
         goto end;
     }
-    if(!params->frames){
-        params->result = S_OK;
+    if(!(*params)->frames){
+        (*params)->result = S_OK;
         goto end;
     }
-    if(pad + params->frames > stream->bufsize_frames){
-        params->result = AUDCLNT_E_BUFFER_TOO_LARGE;
+    if(pad + (*params)->frames > stream->bufsize_frames){
+        (*params)->result = AUDCLNT_E_BUFFER_TOO_LARGE;
         goto end;
     }
 
-    if(stream->wri_offs_frames + params->frames > stream->bufsize_frames){
-        if(stream->tmp_buffer_frames < params->frames){
+    if(stream->wri_offs_frames + (*params)->frames > stream->bufsize_frames){
+        if(stream->tmp_buffer_frames < (*params)->frames){
             if(stream->tmp_buffer){
                 size = 0;
                 NtFreeVirtualMemory(GetCurrentProcess(), (void **)&stream->tmp_buffer,
                                     &size, MEM_RELEASE);
                 stream->tmp_buffer = NULL;
             }
-            size = params->frames * stream->fmt->nBlockAlign;
+            size = (*params)->frames * stream->fmt->nBlockAlign;
             if(NtAllocateVirtualMemory(GetCurrentProcess(), (void **)&stream->tmp_buffer, zero_bits,
                                        &size, MEM_COMMIT, PAGE_READWRITE)){
                 stream->tmp_buffer_frames = 0;
-                params->result = E_OUTOFMEMORY;
+                (*params)->result = E_OUTOFMEMORY;
                 goto end;
             }
-            stream->tmp_buffer_frames = params->frames;
+            stream->tmp_buffer_frames = (*params)->frames;
         }
-        *params->data = stream->tmp_buffer;
-        stream->getbuf_last = -params->frames;
+        (*params).data = stream->tmp_buffer;
+        stream->getbuf_last = -(*params)->frames;
     }else{
-        *params->data = stream->local_buffer + stream->wri_offs_frames * stream->fmt->nBlockAlign;
-        stream->getbuf_last = params->frames;
+        (*params).data = stream->local_buffer + stream->wri_offs_frames * stream->fmt->nBlockAlign;
+        stream->getbuf_last = (*params)->frames;
     }
 
-    silence_buffer(stream, *params->data, params->frames);
-    params->result = S_OK;
+    silence_buffer(stream, (*params).data, (*params)->frames);
+    (*params)->result = S_OK;
 
 end:
     os_unfair_lock_unlock(&stream->lock);
@@ -1552,43 +1549,43 @@ end:
     return STATUS_SUCCESS;
 }
 
-static NTSTATUS unix_release_render_buffer(void *args)
+static NTSTATUS unix_release_render_buffer(LPCSTR args)
 {
     struct release_render_buffer_params *params = args;
-    struct coreaudio_stream *stream = handle_get_stream(params->stream);
+    struct coreaudio_stream *stream = handle_get_stream((*params)->stream);
     BYTE *buffer;
 
     os_unfair_lock_lock(&stream->lock);
 
-    if(!params->written_frames){
+    if(!(*params)->written_frames){
         stream->getbuf_last = 0;
-        params->result = S_OK;
+        (*params)->result = S_OK;
     }else if(!stream->getbuf_last)
-        params->result = AUDCLNT_E_OUT_OF_ORDER;
-    else if(params->written_frames > (stream->getbuf_last >= 0 ? stream->getbuf_last : -stream->getbuf_last))
-        params->result = AUDCLNT_E_INVALID_SIZE;
+        (*params)->result = AUDCLNT_E_OUT_OF_ORDER;
+    else if((*params)->written_frames > (stream->getbuf_last >= 0 ? stream->getbuf_last : -stream->getbuf_last))
+        (*params)->result = AUDCLNT_E_INVALID_SIZE;
     else{
         if(stream->getbuf_last >= 0)
             buffer = stream->local_buffer + stream->wri_offs_frames * stream->fmt->nBlockAlign;
         else
             buffer = stream->tmp_buffer;
 
-        if(params->flags & AUDCLNT_BUFFERFLAGS_SILENT)
-            silence_buffer(stream, buffer, params->written_frames);
+        if((*params)->flags & AUDCLNT_BUFFERFLAGS_SILENT)
+            silence_buffer(stream, buffer, (*params)->written_frames);
 
         if(stream->getbuf_last < 0)
             ca_wrap_buffer(stream->local_buffer,
                            stream->wri_offs_frames * stream->fmt->nBlockAlign,
                            stream->bufsize_frames * stream->fmt->nBlockAlign,
-                           buffer, params->written_frames * stream->fmt->nBlockAlign);
+                           buffer, (*params)->written_frames * stream->fmt->nBlockAlign);
 
-        stream->wri_offs_frames += params->written_frames;
+        stream->wri_offs_frames += (*params)->written_frames;
         stream->wri_offs_frames %= stream->bufsize_frames;
-        stream->held_frames += params->written_frames;
-        stream->written_frames += params->written_frames;
+        stream->held_frames += (*params)->written_frames;
+        stream->written_frames += (*params)->written_frames;
         stream->getbuf_last = 0;
 
-        params->result = S_OK;
+        (*params)->result = S_OK;
     }
 
     os_unfair_lock_unlock(&stream->lock);
@@ -1596,10 +1593,10 @@ static NTSTATUS unix_release_render_buffer(void *args)
     return STATUS_SUCCESS;
 }
 
-static NTSTATUS unix_get_capture_buffer(void *args)
+static NTSTATUS unix_get_capture_buffer(LPCSTR args)
 {
     struct get_capture_buffer_params *params = args;
-    struct coreaudio_stream *stream = handle_get_stream(params->stream);
+    struct coreaudio_stream *stream = handle_get_stream((*params)->stream);
     UINT32 chunk_bytes, chunk_frames;
     LARGE_INTEGER stamp, freq;
     SIZE_T size;
@@ -1607,20 +1604,20 @@ static NTSTATUS unix_get_capture_buffer(void *args)
     os_unfair_lock_lock(&stream->lock);
 
     if(stream->getbuf_last){
-        params->result = AUDCLNT_E_OUT_OF_ORDER;
+        (*params)->result = AUDCLNT_E_OUT_OF_ORDER;
         goto end;
     }
 
     capture_resample(stream);
 
-    *params->frames = 0;
+    (*params).frames = 0;
 
     if(stream->held_frames < stream->period_frames){
-        params->result = AUDCLNT_S_BUFFER_EMPTY;
+        (*params)->result = AUDCLNT_S_BUFFER_EMPTY;
         goto end;
     }
 
-    *params->flags = 0;
+    (*params).flags = 0;
     chunk_frames = stream->bufsize_frames - stream->lcl_offs_frames;
     if(chunk_frames < stream->period_frames){
         chunk_bytes = chunk_frames * stream->fmt->nBlockAlign;
@@ -1629,50 +1626,50 @@ static NTSTATUS unix_get_capture_buffer(void *args)
             NtAllocateVirtualMemory(GetCurrentProcess(), (void **)&stream->tmp_buffer, zero_bits,
                                     &size, MEM_COMMIT, PAGE_READWRITE);
         }
-        *params->data = stream->tmp_buffer;
-        memcpy(*params->data, stream->local_buffer + stream->lcl_offs_frames * stream->fmt->nBlockAlign,
+        (*params).data = stream->tmp_buffer;
+        memcpy((*params).data, stream->local_buffer + stream->lcl_offs_frames * stream->fmt->nBlockAlign,
                chunk_bytes);
-        memcpy(*params->data + chunk_bytes, stream->local_buffer,
+        memcpy((*params).data + chunk_bytes, stream->local_buffer,
                stream->period_frames * stream->fmt->nBlockAlign - chunk_bytes);
     }else
-        *params->data = stream->local_buffer + stream->lcl_offs_frames * stream->fmt->nBlockAlign;
+        (*params).data = stream->local_buffer + stream->lcl_offs_frames * stream->fmt->nBlockAlign;
 
-    stream->getbuf_last = *params->frames = stream->period_frames;
+    stream->getbuf_last = (*params).frames = stream->period_frames;
 
-    if(params->devpos)
-        *params->devpos = stream->written_frames;
-    if(params->qpcpos){ /* fixme: qpc of recording time */
+    if((*params)->devpos)
+        (*params).devpos = stream->written_frames;
+    if((*params)->qpcpos){ /* fixme: qpc of recording time */
         NtQueryPerformanceCounter(&stamp, &freq);
-        *params->qpcpos = (stamp.QuadPart * (INT64)10000000) / freq.QuadPart;
+        (*params).qpcpos = (stamp.QuadPart * (INT64)10000000) / freq.QuadPart;
     }
-    params->result = S_OK;
+    (*params)->result = S_OK;
 
 end:
     os_unfair_lock_unlock(&stream->lock);
     return STATUS_SUCCESS;
 }
 
-static NTSTATUS unix_release_capture_buffer(void *args)
+static NTSTATUS unix_release_capture_buffer(LPCSTR args)
 {
     struct release_capture_buffer_params *params = args;
-    struct coreaudio_stream *stream = handle_get_stream(params->stream);
+    struct coreaudio_stream *stream = handle_get_stream((*params)->stream);
 
     os_unfair_lock_lock(&stream->lock);
 
-    if(!params->done){
+    if(!(*params)->done){
         stream->getbuf_last = 0;
-        params->result = S_OK;
+        (*params)->result = S_OK;
     }else if(!stream->getbuf_last)
-        params->result = AUDCLNT_E_OUT_OF_ORDER;
-    else if(stream->getbuf_last != params->done)
-        params->result = AUDCLNT_E_INVALID_SIZE;
+        (*params)->result = AUDCLNT_E_OUT_OF_ORDER;
+    else if(stream->getbuf_last != (*params)->done)
+        (*params)->result = AUDCLNT_E_INVALID_SIZE;
     else{
-        stream->written_frames += params->done;
-        stream->held_frames -= params->done;
-        stream->lcl_offs_frames += params->done;
+        stream->written_frames += (*params)->done;
+        stream->held_frames -= (*params)->done;
+        stream->lcl_offs_frames += (*params)->done;
         stream->lcl_offs_frames %= stream->bufsize_frames;
         stream->getbuf_last = 0;
-        params->result = S_OK;
+        (*params)->result = S_OK;
     }
 
     os_unfair_lock_unlock(&stream->lock);
@@ -1680,97 +1677,97 @@ static NTSTATUS unix_release_capture_buffer(void *args)
     return STATUS_SUCCESS;
 }
 
-static NTSTATUS unix_get_next_packet_size(void *args)
+static NTSTATUS unix_get_next_packet_size(LPCSTR args)
 {
     struct get_next_packet_size_params *params = args;
-    struct coreaudio_stream *stream = handle_get_stream(params->stream);
+    struct coreaudio_stream *stream = handle_get_stream((*params)->stream);
 
     os_unfair_lock_lock(&stream->lock);
 
     capture_resample(stream);
 
     if(stream->held_frames >= stream->period_frames)
-        *params->frames = stream->period_frames;
+        (*params).frames = stream->period_frames;
     else
-        *params->frames = 0;
+        (*params).frames = 0;
 
     os_unfair_lock_unlock(&stream->lock);
 
-    params->result = S_OK;
+    (*params)->result = S_OK;
     return STATUS_SUCCESS;
 }
 
-static NTSTATUS unix_get_position(void *args)
+static NTSTATUS unix_get_position(LPCSTR args)
 {
     struct get_position_params *params = args;
-    struct coreaudio_stream *stream = handle_get_stream(params->stream);
+    struct coreaudio_stream *stream = handle_get_stream((*params)->stream);
     LARGE_INTEGER stamp, freq;
 
-    if (params->device) {
+    if ((*params)->device) {
         FIXME("Device position reporting not implemented\n");
-        params->result = E_NOTIMPL;
+        (*params)->result = E_NOTIMPL;
         return STATUS_SUCCESS;
     }
 
     os_unfair_lock_lock(&stream->lock);
 
-    *params->pos = stream->written_frames - stream->held_frames;
+    (*params).pos = stream->written_frames - stream->held_frames;
 
     if(stream->share == AUDCLNT_SHAREMODE_SHARED)
-        *params->pos *= stream->fmt->nBlockAlign;
+        (*params).pos *= stream->fmt->nBlockAlign;
 
-    if(params->qpctime){
+    if((*params)->qpctime){
         NtQueryPerformanceCounter(&stamp, &freq);
-        *params->qpctime = (stamp.QuadPart * (INT64)10000000) / freq.QuadPart;
+        (*params).qpctime = (stamp.QuadPart * (INT64)10000000) / freq.QuadPart;
     }
 
     os_unfair_lock_unlock(&stream->lock);
 
-    params->result = S_OK;
+    (*params)->result = S_OK;
     return STATUS_SUCCESS;
 }
 
-static NTSTATUS unix_get_frequency(void *args)
+static NTSTATUS unix_get_frequency(LPCSTR args)
 {
     struct get_frequency_params *params = args;
-    struct coreaudio_stream *stream = handle_get_stream(params->stream);
+    struct coreaudio_stream *stream = handle_get_stream((*params)->stream);
 
     if(stream->share == AUDCLNT_SHAREMODE_SHARED)
-        *params->freq = (UINT64)stream->fmt->nSamplesPerSec * stream->fmt->nBlockAlign;
+        (*params).freq = (UINT64)stream->fmt->nSamplesPerSec * stream->fmt->nBlockAlign;
     else
-        *params->freq = stream->fmt->nSamplesPerSec;
+        (*params).freq = stream->fmt->nSamplesPerSec;
 
-    params->result = S_OK;
+    (*params)->result = S_OK;
     return STATUS_SUCCESS;
 }
 
-static NTSTATUS unix_is_started(void *args)
+static NTSTATUS unix_is_started(LPCSTR args)
 {
     struct is_started_params *params = args;
-    struct coreaudio_stream *stream = handle_get_stream(params->stream);
+    struct coreaudio_stream *stream = handle_get_stream((*params)->stream);
 
     if(stream->playing)
-        params->result = S_OK;
+        (*params)->result = S_OK;
     else
-        params->result = S_FALSE;
+        (*params)->result = S_FALSE;
 
     return STATUS_SUCCESS;
 }
 
-static NTSTATUS unix_get_prop_value(void *args)
+static NTSTATUS unix_get_prop_value(LPCSTR args)
 {
     struct get_prop_value_params *params = args;
 
-    params->result = E_NOTIMPL;
+    (*params)->result = E_NOTIMPL;
 
     return STATUS_SUCCESS;
 }
 
-static NTSTATUS unix_set_volumes(void *args)
+static NTSTATUS unix_set_volumes(LPCSTR args)
 {
     struct set_volumes_params *params = args;
-    struct coreaudio_stream *stream = handle_get_stream(params->stream);
-    Float32 level = params->master_volume;
+    struct coreaudio_stream *stream = handle_get_stream((*params)->stream);
+    Float32 level = (*params)->master_volume;
     OSStatus sc;
     UINT32 i;
     AudioObjectPropertyAddress prop_addr = {
@@ -1786,7 +1783,7 @@ static NTSTATUS unix_set_volumes(void *args)
         WARN("Couldn't set master volume, applying it directly to the channels: %x\n", (int)sc);
 
     for (i = 1; i <= stream->fmt->nChannels; ++i) {
-        const float vol = level * params->session_volumes[i - 1] * params->volumes[i - 1];
+        const float vol = level * (*params)->session_volumes[i - 1] * (*params)->volumes[i - 1];
 
         prop_addr.mElement = i;
 
@@ -1799,10 +1796,10 @@ static NTSTATUS unix_set_volumes(void *args)
     return STATUS_SUCCESS;
 }
 
-static NTSTATUS unix_set_event_handle(void *args)
+static NTSTATUS unix_set_event_handle(LPCSTR args)
 {
     struct set_event_handle_params *params = args;
-    struct coreaudio_stream *stream = handle_get_stream(params->stream);
+    struct coreaudio_stream *stream = handle_get_stream((*params)->stream);
     HRESULT hr = S_OK;
 
     os_unfair_lock_lock(&stream->lock);
@@ -1813,14 +1810,14 @@ static NTSTATUS unix_set_event_handle(void *args)
     else if(stream->event)
         hr = HRESULT_FROM_WIN32(ERROR_INVALID_NAME);
     else
-        stream->event = params->event;
+        stream->event = (*params)->event;
     os_unfair_lock_unlock(&stream->lock);
 
-    params->result = hr;
+    (*params)->result = hr;
     return STATUS_SUCCESS;
 }
 
-const unixlib_entry_t __wine_unix_call_funcs[] =
+const enum unixlib_entry_t __wine_unix_call_funcs[] =
 {
     unix_process_attach,
     unix_not_implemented,
@@ -1866,9 +1863,9 @@ C_ASSERT(ARRAYSIZE(__wine_unix_call_funcs) == funcs_count);
 
 typedef UINT PTR32;
 
-static NTSTATUS unix_wow64_main_loop(void *args)
+static NTSTATUS unix_wow64_main_loop(LPCSTR args)
 {
-    struct
+    struct params
     {
         PTR32 event;
     } *params32 = args;
@@ -1879,9 +1876,9 @@ static NTSTATUS unix_wow64_main_loop(void *args)
     return unix_main_loop(&params);
 }
 
-static NTSTATUS unix_wow64_get_endpoint_ids(void *args)
+static NTSTATUS unix_wow64_get_endpoint_ids(LPCSTR args)
 {
-    struct
+    struct params
     {
         EDataFlow flow;
         PTR32 endpoints;
@@ -1904,9 +1901,9 @@ static NTSTATUS unix_wow64_get_endpoint_ids(void *args)
     return STATUS_SUCCESS;
 }
 
-static NTSTATUS unix_wow64_create_stream(void *args)
+static NTSTATUS unix_wow64_create_stream(LPCSTR args)
 {
-    struct
+    struct params
     {
         PTR32 name;
         PTR32 device;
@@ -1938,9 +1935,9 @@ static NTSTATUS unix_wow64_create_stream(void *args)
     return STATUS_SUCCESS;
 }
 
-static NTSTATUS unix_wow64_release_stream(void *args)
+static NTSTATUS unix_wow64_release_stream(LPCSTR args)
 {
-    struct
+    struct params
     {
         stream_handle stream;
         PTR32 timer_thread;
@@ -1956,9 +1953,9 @@ static NTSTATUS unix_wow64_release_stream(void *args)
     return STATUS_SUCCESS;
 }
 
-static NTSTATUS unix_wow64_get_render_buffer(void *args)
+static NTSTATUS unix_wow64_get_render_buffer(LPCSTR args)
 {
-    struct
+    struct params
     {
         stream_handle stream;
         UINT32 frames;
@@ -1978,9 +1975,9 @@ static NTSTATUS unix_wow64_get_render_buffer(void *args)
     return STATUS_SUCCESS;
 }
 
-static NTSTATUS unix_wow64_get_capture_buffer(void *args)
+static NTSTATUS unix_wow64_get_capture_buffer(LPCSTR args)
 {
-    struct
+    struct params
     {
         stream_handle stream;
         HRESULT result;
@@ -2006,9 +2003,9 @@ static NTSTATUS unix_wow64_get_capture_buffer(void *args)
     return STATUS_SUCCESS;
 };
 
-static NTSTATUS unix_wow64_is_format_supported(void *args)
+static NTSTATUS unix_wow64_is_format_supported(LPCSTR args)
 {
-    struct
+    struct params
     {
         PTR32 device;
         EDataFlow flow;
@@ -2030,9 +2027,9 @@ static NTSTATUS unix_wow64_is_format_supported(void *args)
     return STATUS_SUCCESS;
 }
 
-static NTSTATUS unix_wow64_get_mix_format(void *args)
+static NTSTATUS unix_wow64_get_mix_format(LPCSTR args)
 {
-    struct
+    struct params
     {
         PTR32 device;
         EDataFlow flow;
@@ -2050,9 +2047,9 @@ static NTSTATUS unix_wow64_get_mix_format(void *args)
     return STATUS_SUCCESS;
 }
 
-static NTSTATUS unix_wow64_get_device_period(void *args)
+static NTSTATUS unix_wow64_get_device_period(LPCSTR args)
 {
-    struct
+    struct params
     {
         PTR32 device;
         EDataFlow flow;
@@ -2072,9 +2069,9 @@ static NTSTATUS unix_wow64_get_device_period(void *args)
     return STATUS_SUCCESS;
 }
 
-static NTSTATUS unix_wow64_get_buffer_size(void *args)
+static NTSTATUS unix_wow64_get_buffer_size(LPCSTR args)
 {
-    struct
+    struct params
     {
         stream_handle stream;
         HRESULT result;
@@ -2090,9 +2087,9 @@ static NTSTATUS unix_wow64_get_buffer_size(void *args)
     return STATUS_SUCCESS;
 }
 
-static NTSTATUS unix_wow64_get_latency(void *args)
+static NTSTATUS unix_wow64_get_latency(LPCSTR args)
 {
-    struct
+    struct params
     {
         stream_handle stream;
         HRESULT result;
@@ -2108,9 +2105,9 @@ static NTSTATUS unix_wow64_get_latency(void *args)
     return STATUS_SUCCESS;
 }
 
-static NTSTATUS unix_wow64_get_current_padding(void *args)
+static NTSTATUS unix_wow64_get_current_padding(LPCSTR args)
 {
-    struct
+    struct params
     {
         stream_handle stream;
         HRESULT result;
@@ -2126,9 +2123,9 @@ static NTSTATUS unix_wow64_get_current_padding(void *args)
     return STATUS_SUCCESS;
 }
 
-static NTSTATUS unix_wow64_get_next_packet_size(void *args)
+static NTSTATUS unix_wow64_get_next_packet_size(LPCSTR args)
 {
-    struct
+    struct params
     {
         stream_handle stream;
         HRESULT result;
@@ -2144,9 +2141,9 @@ static NTSTATUS unix_wow64_get_next_packet_size(void *args)
     return STATUS_SUCCESS;
 }
 
-static NTSTATUS unix_wow64_get_position(void *args)
+static NTSTATUS unix_wow64_get_position(LPCSTR args)
 {
-    struct
+    struct params
     {
         stream_handle stream;
         BOOL device;
@@ -2166,9 +2163,9 @@ static NTSTATUS unix_wow64_get_position(void *args)
     return STATUS_SUCCESS;
 }
 
-static NTSTATUS unix_wow64_get_frequency(void *args)
+static NTSTATUS unix_wow64_get_frequency(LPCSTR args)
 {
-    struct
+    struct params
     {
         stream_handle stream;
         HRESULT result;
@@ -2184,9 +2181,9 @@ static NTSTATUS unix_wow64_get_frequency(void *args)
     return STATUS_SUCCESS;
 }
 
-static NTSTATUS unix_wow64_set_volumes(void *args)
+static NTSTATUS unix_wow64_set_volumes(LPCSTR args)
 {
-    struct
+    struct params
     {
         stream_handle stream;
         float master_volume;
@@ -2203,9 +2200,9 @@ static NTSTATUS unix_wow64_set_volumes(void *args)
     return unix_set_volumes(&params);
 }
 
-static NTSTATUS unix_wow64_set_event_handle(void *args)
+static NTSTATUS unix_wow64_set_event_handle(LPCSTR args)
 {
-    struct
+    struct params
     {
         stream_handle stream;
         PTR32 event;
@@ -2221,7 +2218,7 @@ static NTSTATUS unix_wow64_set_event_handle(void *args)
     return STATUS_SUCCESS;
 }
 
-static NTSTATUS unix_wow64_get_prop_value(void *args)
+static NTSTATUS unix_wow64_get_prop_value(LPCSTR args)
 {
     struct propvariant32
     {
@@ -2234,7 +2231,7 @@ static NTSTATUS unix_wow64_get_prop_value(void *args)
             ULARGE_INTEGER uhVal;
         };
     } *value32;
-    struct
+    struct params
     {
         PTR32 device;
         EDataFlow flow;
@@ -2277,7 +2274,7 @@ static NTSTATUS unix_wow64_get_prop_value(void *args)
     return STATUS_SUCCESS;
 }
 
-const unixlib_entry_t __wine_unix_call_wow64_funcs[] =
+const enum unixlib_entry_t __wine_unix_call_wow64_funcs[] =
 {
     unix_process_attach,
     unix_not_implemented,
@@ -2317,6 +2314,6 @@ const unixlib_entry_t __wine_unix_call_wow64_funcs[] =
     unix_not_implemented,
 };
 
-C_ASSERT(ARRAYSIZE(__wine_unix_call_wow64_funcs) == funcs_count);
+C_ASSERT(ARRAY_SIZE(__wine_unix_call_wow64_funcs) == funcs_count);
 
 #endif /* _WIN64 */

@@ -1293,14 +1293,16 @@ static void udev_add_device(struct udev_device *dev, int fd)
 
     if (strcmp(subsystem, "hidraw") == 0)
     {
-        if (!(impl = raw_device_create(&hidraw_device_vtbl, sizeof(struct hidraw_device)))) return;
+        raw_device_create(&hidraw_device_vtbl as vtbl, sizeof(struct hidraw_device));
+        if (vtbl) return;
+        // void *raw_device_create(const struct raw_device_vtbl *vtbl, SIZE_T size)
         list_add_tail(&device_list, &impl->unix_device.entry);
         impl->read_report = hidraw_device_read_report;
         impl->udev_device = udev_device_ref(dev);
         strcpy(impl->devnode, devnode);
         impl->device_fd = fd;
 
-        bus_event_queue_device_created(&event_queue, &impl->unix_device, &desc);
+        bus_event_queue_device_created(event_queue, impl->unix_device, desc);
     }
 #ifdef HAS_PROPER_INPUT_HEADER
     else if (strcmp(subsystem, "input") == 0)
@@ -1319,7 +1321,7 @@ static void udev_add_device(struct udev_device *dev, int fd)
             return;
         }
 
-        bus_event_queue_device_created(&event_queue, &impl->unix_device, &desc);
+        bus_event_queue_device_created(event_queue, impl->unix_device, desc);
     }
 #endif
 }

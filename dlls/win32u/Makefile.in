@@ -1,11 +1,10 @@
 EXTRADEFS = -D_WIN32U_
 MODULE    = win32u.dll
 UNIXLIB   = win32u.so
-IMPORTLIB = win32u
+IMPORTLIB = win32u freetype
 IMPORTS   = ntdll winecrt0
-UNIX_CFLAGS  = $(FREETYPE_CFLAGS) $(FONTCONFIG_CFLAGS)
-UNIX_LIBS    = $(CARBON_LIBS) $(APPKIT_LIBS) $(PTHREAD_LIBS) -lm
-
+UNIX_CFLAGS = $(FONTCONFIG_CFLAGS) -framework Security
+UNIX_LIBS   = $(CARBON_LIBS) $(APPKIT_LIBS) $(PTHREAD_LIBS) -lm
 EXTRADLLFLAGS = -nodefaultlibs
 
 SOURCES = \
@@ -30,7 +29,6 @@ SOURCES = \
 	driver.c \
 	emfdrv.c \
 	font.c \
-	freetype.c \
 	gdiobj.c \
 	hook.c \
 	imm.c \

@@ -343,7 +343,7 @@ extern int add_gdi_face( const WCHAR *family_name, const WCHAR *second_name,
                          DWORD ntmflags, DWORD weight, DWORD version, DWORD flags,
                          const struct bitmap_font_size *size );
 extern UINT font_init(void);
-extern const struct font_backend_funcs *init_freetype_lib(void);
+// extern const struct font_backend_funcs *init_freetype_lib(void);
 
 /* opentype.c */
 

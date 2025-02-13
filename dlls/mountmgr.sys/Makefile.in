@@ -2,8 +2,17 @@ MODULE    = mountmgr.sys
 UNIXLIB   = mountmgr.so
 IMPORTS   = uuid advapi32 ntoskrnl
 DELAYIMPORTS = user32
-UNIX_CFLAGS  = $(DBUS_CFLAGS) $(HAL_CFLAGS)
-UNIX_LIBS    = $(DISKARBITRATION_LIBS) $(SYSTEMCONFIGURATION_LIBS) $(CORESERVICES_LIBS) $(SECURITY_LIBS)
+UNIX_CFLAGS  = \
+    $(DBUS_CFLAGS) \
+	$(HAL_CFLAGS) \
+	-F/Applications/Xcode-beta.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks \
+	-framework Metadata
+
+UNIX_LIBS    = \
+	$(DISKARBITRATION_LIBS) \
+	$(SYSTEMCONFIGURATION_LIBS) \
+	$(CORESERVICES_LIBS) \
+	$(SECURITY_LIBS)
 
 EXTRADLLFLAGS = -Wl,--subsystem,native
 

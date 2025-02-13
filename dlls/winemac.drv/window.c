@@ -30,7 +30,7 @@
 #include <IOKit/pwr_mgt/IOPMLib.h>
 #define GetCurrentThread Mac_GetCurrentThread
 #define LoadResource Mac_LoadResource
-#include <CoreServices/CoreServices.h>
+// #include <CoreServices/CoreServices.h>
 #undef GetCurrentThread
 #undef LoadResource
 

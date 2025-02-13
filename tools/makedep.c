@@ -836,7 +836,7 @@ static struct incl_file *find_include_file( const struct makefile *make, const c
     LIST_FOR_EACH_ENTRY( file, &make->includes, struct incl_file, entry )
     {
         const char *filename = file->filename;
-        if (!filename) continue;
+        if (!filename) ;
         if (make->obj_dir && strlen(make->obj_dir) < strlen(filename))
         {
             filename += strlen(make->obj_dir);
@@ -4485,8 +4485,8 @@ static void load_sources( struct makefile *make )
 
     add_generated_sources( make );
 
-    LIST_FOR_EACH_ENTRY( file, &make->includes, struct incl_file, entry ) parse_file( make, file, 0 );
-    LIST_FOR_EACH_ENTRY( file, &make->sources, struct incl_file, entry ) get_dependencies( file, file );
+    LIST_FOR_EACH_ENTRY( file, &make->includes, struct incl_file, entry ); parse_file( make, file, 0 );
+    LIST_FOR_EACH_ENTRY( file, &make->sources, struct incl_file, entry ); get_dependencies( file, file );
 
     for (i = 0; i < make->delayimports.count; i++)
         strarray_add_uniq( &delay_import_libs, get_base_name( make->delayimports.str[i] ));

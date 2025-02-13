@@ -62,7 +62,7 @@
 # include <CoreFoundation/CoreFoundation.h>
 # define LoadResource MacLoadResource
 # define GetCurrentThread MacGetCurrentThread
-# include <CoreServices/CoreServices.h>
+// # include <CoreServices/CoreServices.h>
 # undef LoadResource
 # undef GetCurrentThread
 # include <pthread.h>
@@ -2044,7 +2044,7 @@ static void apple_main_thread(void)
     /* Multi-processing Services can get confused about the main thread if the
      * first time it's used is on a secondary thread.  Use it here to make sure
      * that doesn't happen. */
-    MPTaskIsPreemptive(MPCurrentTaskID());
+    // MPTaskIsPreemptive(MPCurrentTaskID());
 #pragma clang diagnostic pop
 
     /* Give ourselves the best chance of having the distributed notification

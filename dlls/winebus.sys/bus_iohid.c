@@ -17,44 +17,45 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
  */
 
+#if defined(__cplusplus)
+extern "C" 
+{
+#endif
+
 #if 0
 #pragma makedep unix
 #endif
 
-#include "config.h"
-
+#define _WIN32
+#include "libs/vkd3d/include/private/vkd3d_common.h"
+#if defined(__APPLE__)
+# undef _WIN32
+#endif
+#include "wine/hid.h"
+#include "wine/list.h"
+#include "unixlib.h"
+#include "unix_private.h"
 #include <stdarg.h>
+#include <stddef.h>
+#include <string.h>
 #include <sys/types.h>
+#include <pthread/pthread.h>
+#if defined(dispatch_block_t)
+# undef dispatch_block_t
+#endif
+#define dispatch_block_t dispatch_io_t  
 
 #ifdef __APPLE__
 #define DWORD UInt32
 #define LPDWORD UInt32*
 #define LONG SInt32
 #define LPLONG SInt32*
-#define E_PENDING __carbon_E_PENDING
-#define ULONG __carbon_ULONG
-#define E_INVALIDARG __carbon_E_INVALIDARG
-#define E_OUTOFMEMORY __carbon_E_OUTOFMEMORY
-#define E_HANDLE __carbon_E_HANDLE
-#define E_ACCESSDENIED __carbon_E_ACCESSDENIED
-#define E_UNEXPECTED __carbon_E_UNEXPECTED
-#define E_FAIL __carbon_E_FAIL
-#define E_ABORT __carbon_E_ABORT
-#define E_POINTER __carbon_E_POINTER
-#define E_NOINTERFACE __carbon_E_NOINTERFACE
-#define E_NOTIMPL __carbon_E_NOTIMPL
-#define S_FALSE __carbon_S_FALSE
-#define S_OK __carbon_S_OK
-#define HRESULT_FACILITY __carbon_HRESULT_FACILITY
-#define IS_ERROR __carbon_IS_ERROR
-#define FAILED __carbon_FAILED
-#define SUCCEEDED __carbon_SUCCEEDED
-#define MAKE_HRESULT __carbon_MAKE_HRESULT
 #define HRESULT __carbon_HRESULT
-#define STDMETHODCALLTYPE __carbon_STDMETHODCALLTYPE
-#define PAGE_SHIFT __carbon_PAGE_SHIFT
-#include <IOKit/IOKitLib.h>
-#include <IOKit/hid/IOHIDLib.h>
+#include <IOKit/hid/IOHIDProperties.h>
+#include <IOKit/hid/IOHIDDevice.h>
+#include <IOKit/hid/IOHIDEventServiceTypes.h>
+#include <IOKit/hid/IOHIDUsageTables.h>
+#include <IOKit/IOReturn.h>
 #undef ULONG
 #undef E_INVALIDARG
 #undef E_OUTOFMEMORY
@@ -83,26 +84,11 @@
 #undef PAGE_SHIFT
 #endif /* __APPLE__ */
 
-#include <pthread.h>
-
-#include "ntstatus.h"
-#define WIN32_NO_STATUS
-#include "windef.h"
-#include "winbase.h"
-#include "winternl.h"
-#include "winioctl.h"
-#include "ddk/wdm.h"
-#include "ddk/hidtypes.h"
-#include "wine/debug.h"
-
-#include "unix_private.h"
-
-WINE_DEFAULT_DEBUG_CHANNEL(hid);
+WINE_DEFAULT_DEBUG_CHANNEL(otherside);
 #ifdef __APPLE__
-
 static pthread_mutex_t iohid_cs = PTHREAD_MUTEX_INITIALIZER;
 
-static IOHIDManagerRef hid_manager;
+static IOHIDDeviceRef hid_manager;
 static CFRunLoopRef run_loop;
 static struct list event_queue = LIST_INIT(event_queue);
 static struct list device_list = LIST_INIT(device_list);
@@ -120,12 +106,12 @@ static inline struct iohid_device *impl_from_unix_device(struct unix_device *ifa
     return CONTAINING_RECORD(iface, struct iohid_device, unix_device);
 }
 
-static struct iohid_device *find_device_from_iohid(IOHIDDeviceRef IOHIDDevice)
+static struct iohid_device *find_device_from_iohid(IOHIDDeviceRef device)
 {
     struct iohid_device *impl;
 
     LIST_FOR_EACH_ENTRY(impl, &device_list, struct iohid_device, unix_device.entry)
-        if (impl->device == IOHIDDevice) return impl;
+        if (impl->device == device) return impl;
 
     return NULL;
 }
@@ -150,14 +136,14 @@ static void handle_IOHIDDeviceIOHIDReportCallback(void *context,
         uint32_t reportID, uint8_t *report, CFIndex report_length)
 {
     struct unix_device *iface = (struct unix_device *)context;
-    bus_event_queue_input_report(&event_queue, iface, report, report_length);
+    bus_event_queue_input_report(event_queue, iface, report, report_length);
 }
 
 static void iohid_device_destroy(struct unix_device *iface)
 {
 }
 
-static NTSTATUS iohid_device_start(struct unix_device *iface)
+static IOReturn iohid_device_start(struct unix_device *iface)
 {
     DWORD length;
     struct iohid_device *impl = impl_from_unix_device(iface);
@@ -182,13 +168,13 @@ static void iohid_device_stop(struct unix_device *iface)
     pthread_mutex_unlock(&iohid_cs);
 }
 
-static NTSTATUS iohid_device_get_report_descriptor(struct unix_device *iface, BYTE *buffer,
+static IOReturn iohid_device_get_report_descriptor(struct unix_device *iface, BYTE *buffer,
                                                    UINT length, UINT *out_length)
 {
     struct iohid_device *impl = impl_from_unix_device(iface);
     CFDataRef data = IOHIDDeviceGetProperty(impl->device, CFSTR(kIOHIDReportDescriptorKey));
     int data_length = CFDataGetLength(data);
-    const UInt8 *ptr;
+    const UINT8 *ptr;
 
     *out_length = data_length;
     if (length < data_length)
@@ -267,7 +253,7 @@ static const struct raw_device_vtbl iohid_device_vtbl =
     iohid_device_set_feature_report,
 };
 
-static void handle_DeviceMatchingCallback(void *context, IOReturn result, void *sender, IOHIDDeviceRef IOHIDDevice)
+static void handle_DeviceMatchingCallback(void *context, IOReturn result, void *sender, IOHIDDeviceRef device)
 {
     struct device_desc desc =
     {
@@ -278,15 +264,15 @@ static void handle_DeviceMatchingCallback(void *context, IOReturn result, void *
     USAGE_AND_PAGE usages;
     CFStringRef str;
 
-    usages.UsagePage = CFNumberToDWORD(IOHIDDeviceGetProperty(IOHIDDevice, CFSTR(kIOHIDPrimaryUsagePageKey)));
-    usages.Usage = CFNumberToDWORD(IOHIDDeviceGetProperty(IOHIDDevice, CFSTR(kIOHIDPrimaryUsageKey)));
+    usages.UsagePage = CFNumberToDWORD(IOHIDDeviceGetProperty(device, CFSTR(kIOHIDPrimaryUsagePageKey)));
+    usages.Usage = CFNumberToDWORD(IOHIDDeviceGetProperty(device, CFSTR(kIOHIDPrimaryUsageKey)));
 
-    desc.vid = CFNumberToDWORD(IOHIDDeviceGetProperty(IOHIDDevice, CFSTR(kIOHIDVendorIDKey)));
-    desc.pid = CFNumberToDWORD(IOHIDDeviceGetProperty(IOHIDDevice, CFSTR(kIOHIDProductIDKey)));
-    desc.version = CFNumberToDWORD(IOHIDDeviceGetProperty(IOHIDDevice, CFSTR(kIOHIDVersionNumberKey)));
-    desc.uid = CFNumberToDWORD(IOHIDDeviceGetProperty(IOHIDDevice, CFSTR(kIOHIDLocationIDKey)));
+    desc.vid = CFNumberToDWORD(IOHIDDeviceGetProperty(device, CFSTR(kIOHIDVendorIDKey)));
+    desc.pid = CFNumberToDWORD(IOHIDDeviceGetProperty(device, CFSTR(kIOHIDProductIDKey)));
+    desc.version = CFNumberToDWORD(IOHIDDeviceGetProperty(device, CFSTR(kIOHIDVersionNumberKey)));
+    desc.uid = CFNumberToDWORD(IOHIDDeviceGetProperty(device, CFSTR(kIOHIDLocationIDKey)));
 
-    if ((str = IOHIDDeviceGetProperty(IOHIDDevice, CFSTR(kIOHIDTransportKey))))
+    if ((str = IOHIDDeviceGetProperty(device, CFSTR(kIOHIDTransportKey))))
         desc.is_bluetooth = !CFStringCompare(str, CFSTR(kIOHIDTransportBluetoothValue), 0) ||
                             !CFStringCompare(str, CFSTR(kIOHIDTransportBluetoothLowEnergyValue), 0);
 
@@ -297,64 +283,65 @@ static void handle_DeviceMatchingCallback(void *context, IOReturn result, void *
          * opening keyboards, mice, or the Touch Bar on older MacBooks triggers
          * a permissions dialog for input monitoring.
          */
-        ERR("Ignoring HID device %p (vid %04x, pid %04x): not a joystick or gamepad\n", IOHIDDevice, desc.vid, desc.pid);
+        ERR("Ignoring HID device %p (vid %04x, pid %04x): not a joystick or gamepad\n", device, desc.vid, desc.pid);
         return;
     }
 
-    if (IOHIDDeviceOpen(IOHIDDevice, 0) != kIOReturnSuccess)
+    if (IOHIDDeviceOpen(device, 0) != kIOReturnSuccess)
     {
-        ERR("Failed to open HID device %p (vid %04x, pid %04x)\n", IOHIDDevice, desc.vid, desc.pid);
+        ERR("Failed to open HID device %p (vid %04x, pid %04x)\n", device, desc.vid, desc.pid);
         return;
     }
-    IOHIDDeviceScheduleWithRunLoop(IOHIDDevice, CFRunLoopGetCurrent(), kCFRunLoopDefaultMode);
+    IOHIDDeviceScheduleWithRunLoop(device, CFRunLoopGetCurrent(), kCFRunLoopDefaultMode);
 
-    str = IOHIDDeviceGetProperty(IOHIDDevice, CFSTR(kIOHIDManufacturerKey));
-    if (str) CFStringToWSTR(str, desc.manufacturer, ARRAY_SIZE(desc.manufacturer));
-    str = IOHIDDeviceGetProperty(IOHIDDevice, CFSTR(kIOHIDProductKey));
-    if (str) CFStringToWSTR(str, desc.product, ARRAY_SIZE(desc.product));
-    str = IOHIDDeviceGetProperty(IOHIDDevice, CFSTR(kIOHIDSerialNumberKey));
-    if (str) CFStringToWSTR(str, desc.serialnumber, ARRAY_SIZE(desc.serialnumber));
+    str = IOHIDDeviceGetProperty(device, CFSTR(kIOHIDManufacturerKey));
+    if (str) CFStringToWSTR(str, desc.manufacturer, ARRAYSIZE(desc.manufacturer));
+    str = IOHIDDeviceGetProperty(device, CFSTR(kIOHIDProductKey));
+    if (str) CFStringToWSTR(str, desc.product, ARRAYSIZE(desc.product));
+    str = IOHIDDeviceGetProperty(device, CFSTR(kIOHIDSerialNumberKey));
+    if (str) CFStringToWSTR(str, desc.serialnumber, ARRAYSIZE(desc.serialnumber));
 
-    if (IOHIDDeviceConformsTo(IOHIDDevice, kHIDPage_GenericDesktop, kHIDUsage_GD_GamePad) ||
-       IOHIDDeviceConformsTo(IOHIDDevice, kHIDPage_GenericDesktop, kHIDUsage_GD_Joystick))
+    if (IOHIDDeviceConformsTo(device, kHIDPage_GenericDesktop, kHIDUsage_GD_GamePad) ||
+       IOHIDDeviceConformsTo(device, kHIDPage_GenericDesktop, kHIDUsage_GD_Joystick))
     {
         if (is_xbox_gamepad(desc.vid, desc.pid))
             desc.is_gamepad = TRUE;
     }
 
-    TRACE("dev %p, desc %s.\n", IOHIDDevice, debugstr_device_desc(&desc));
+    TRACE("dev %p, desc %s.\n", device, debugstr_device_desc(&desc));
 
     if (!(impl = raw_device_create(&iohid_device_vtbl, sizeof(struct iohid_device)))) return;
     list_add_tail(&device_list, &impl->unix_device.entry);
-    impl->device = IOHIDDevice;
+    impl->device = device;
     impl->buffer = NULL;
 
-    bus_event_queue_device_created(&event_queue, &impl->unix_device, &desc);
+    bus_event_queue_device_created(event_queue, &impl->unix_device, &desc);
 }
 
-static void handle_RemovalCallback(void *context, IOReturn result, void *sender, IOHIDDeviceRef IOHIDDevice)
+static void handle_RemovalCallback(void *context, IOReturn result, void *sender, IOHIDDeviceRef device)
 {
     struct iohid_device *impl;
 
-    TRACE("OS/X IOHID Device Removed %p\n", IOHIDDevice);
-    IOHIDDeviceRegisterInputReportCallback(IOHIDDevice, NULL, 0, NULL, NULL);
+    TRACE("OS/X IOHID Device Removed %p\n", device);
+    IOHIDDeviceRegisterInputReportCallback(device, NULL, 0, NULL, NULL);
     /* Note: Yes, we leak the buffer. But according to research there is no
              safe way to deallocate that buffer. */
-    IOHIDDeviceUnscheduleFromRunLoop(IOHIDDevice, CFRunLoopGetCurrent(), kCFRunLoopDefaultMode);
-    IOHIDDeviceClose(IOHIDDevice, 0);
+    IOHIDDeviceUnscheduleFromRunLoop(device, CFRunLoopGetCurrent(), kCFRunLoopDefaultMode);
+    IOHIDDeviceClose(device, 0);
 
-    impl = find_device_from_iohid(IOHIDDevice);
-    if (impl) bus_event_queue_device_removed(&event_queue, &impl->unix_device);
-    else WARN("failed to find device for iohid device %p\n", IOHIDDevice);
+    impl = find_device_from_iohid(device);
+    if (impl) bus_event_queue_device_removed(event_queue, &impl->unix_device);
+    else WARN("failed to find device for iohid device %p\n", device);
 }
 
-NTSTATUS iohid_bus_init(void *args)
+IOReturn iohid_bus_init(void *args)
 {
     TRACE("args %p\n", args);
 
     options = *(struct iohid_bus_options *)args;
+    hid_manager = IOHIDDeviceCreate(kCFAllocatorDefault, 0L);
 
-    if (!(hid_manager = IOHIDManagerCreate(kCFAllocatorDefault, 0L)))
+    if (!hid_manager)
     {
         ERR("IOHID manager creation failed\n");
         return STATUS_UNSUCCESSFUL;
@@ -362,14 +349,13 @@ NTSTATUS iohid_bus_init(void *args)
 
     run_loop = CFRunLoopGetCurrent();
 
-    IOHIDManagerSetDeviceMatching(hid_manager, NULL);
-    IOHIDManagerRegisterDeviceMatchingCallback(hid_manager, handle_DeviceMatchingCallback, NULL);
-    IOHIDManagerRegisterDeviceRemovalCallback(hid_manager, handle_RemovalCallback, NULL);
-    IOHIDManagerScheduleWithRunLoop(hid_manager, run_loop, kCFRunLoopDefaultMode);
+    IOHIDDeviceSetInputValueMatching(hid_manager, NULL);
+    IOHIDDeviceRegisterRemovalCallback(hid_manager, NULL, NULL);
+    IOHIDDeviceScheduleWithRunLoop(hid_manager, run_loop, kCFRunLoopDefaultMode);
     return STATUS_SUCCESS;
 }
 
-NTSTATUS iohid_bus_wait(void *args)
+IOReturn iohid_bus_wait(void *args)
 {
     struct bus_event *result = args;
     CFRunLoopRunResult ret;
@@ -379,47 +365,49 @@ NTSTATUS iohid_bus_wait(void *args)
 
     do
     {
-        if (bus_event_queue_pop(&event_queue, result)) return STATUS_PENDING;
+        if (bus_event_queue_pop(event_queue, result)) return STATUS_PENDING;
         pthread_mutex_lock(&iohid_cs);
         ret = CFRunLoopRunInMode(kCFRunLoopDefaultMode, 10, TRUE);
         pthread_mutex_unlock(&iohid_cs);
     } while (ret != kCFRunLoopRunStopped);
 
     TRACE("IOHID main loop exiting\n");
-    bus_event_queue_destroy(&event_queue);
-    IOHIDManagerRegisterDeviceMatchingCallback(hid_manager, NULL, NULL);
-    IOHIDManagerRegisterDeviceRemovalCallback(hid_manager, NULL, NULL);
+    bus_event_queue_destroy(event_queue);
+    IOHIDDeviceRegisterRemovalCallback(hid_manager, NULL, NULL);
     CFRelease(hid_manager);
     return STATUS_SUCCESS;
 }
 
-NTSTATUS iohid_bus_stop(void *args)
+IOReturn iohid_bus_stop(void *args)
 {
     if (!run_loop) return STATUS_SUCCESS;
 
-    IOHIDManagerUnscheduleFromRunLoop(hid_manager, run_loop, kCFRunLoopDefaultMode);
+    IOHIDDeviceUnscheduleFromRunLoop(hid_manager, (CFRunLoopRef) run_loop, (CFStringRef) kCFRunLoopDefaultMode);
     CFRunLoopStop(run_loop);
     return STATUS_SUCCESS;
 }
 
 #else
 
-NTSTATUS iohid_bus_init(void *args)
+IOReturn iohid_bus_init(void *args)
 {
     WARN("IOHID support not compiled in!\n");
     return STATUS_NOT_IMPLEMENTED;
 }
 
-NTSTATUS iohid_bus_wait(void *args)
+IOReturn iohid_bus_wait(void *args)
 {
     WARN("IOHID support not compiled in!\n");
     return STATUS_NOT_IMPLEMENTED;
 }
 
-NTSTATUS iohid_bus_stop(void *args)
+IOReturn iohid_bus_stop(void *args)
 {
     WARN("IOHID support not compiled in!\n");
     return STATUS_NOT_IMPLEMENTED;
 }
 
 #endif /* __APPLE__ */
+#if defined(__cplusplus)
+}
+#endif

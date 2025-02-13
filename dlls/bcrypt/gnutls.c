@@ -2816,7 +2816,7 @@ const unixlib_entry_t __wine_unix_call_funcs[] =
     key_asymmetric_derive_key,
 };
 
-C_ASSERT( ARRAYSIZE(__wine_unix_call_funcs) == unix_funcs_count );
+C_ASSERT( ARRAY_SIZE(__wine_unix_call_funcs) == unix_funcs_count );
 
 #ifdef _WIN64
 
@@ -3351,7 +3351,7 @@ const unixlib_entry_t __wine_unix_call_wow64_funcs[] =
     wow64_key_asymmetric_derive_key,
 };
 
-C_ASSERT( ARRAYSIZE(__wine_unix_call_wow64_funcs) == unix_funcs_count );
+C_ASSERT( ARRAY_SIZE(__wine_unix_call_wow64_funcs) == unix_funcs_count );
 
 #endif  /* _WIN64 */
 

@@ -885,9 +885,9 @@ typedef struct DECLSPEC_ALIGN(8) MEM_EXTENDED_PARAMETER {
 #define CONTAINING_RECORD(address, type, field) \
   ((type *)((PCHAR)(address) - offsetof(type, field)))
 
-#define ARRAYSIZE(x) (sizeof(x) / sizeof((x)[0]))
+#define ARRAYSIZE(x) (sizeof(&x) / sizeof((&x)[0]))
 #ifdef __WINESRC__
-# define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
+# define ARRAY_SIZE(x) (sizeof(&x) / sizeof((&x)[0]))
 #endif
 
 /* Types */

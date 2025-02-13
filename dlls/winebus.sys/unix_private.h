@@ -25,6 +25,9 @@
 #include <winbase.h>
 #include <winternl.h>
 #include <ddk/hidsdi.h>
+#include <objc/NSObject.h>
+#include <DriverKit/queue.h>
+#include <DriverKit/IOReturn.h>
 
 #include "unixlib.h"
 
@@ -96,9 +99,9 @@ struct unix_device;
 struct raw_device_vtbl
 {
     void (*destroy)(struct unix_device *iface);
-    NTSTATUS (*start)(struct unix_device *iface);
+    IOReturn (*start)(struct unix_device *iface);
     void (*stop)(struct unix_device *iface);
-    NTSTATUS (*get_report_descriptor)(struct unix_device *iface, BYTE *buffer, UINT length, UINT *out_length);
+    IOReturn (*get_report_descriptor)(struct unix_device *iface, BYTE *buffer, UINT length, UINT *out_length);
     void (*set_output_report)(struct unix_device *iface, HID_XFER_PACKET *packet, IO_STATUS_BLOCK *io);
     void (*get_feature_report)(struct unix_device *iface, HID_XFER_PACKET *packet, IO_STATUS_BLOCK *io);
     void (*set_feature_report)(struct unix_device *iface, HID_XFER_PACKET *packet, IO_STATUS_BLOCK *io);
@@ -107,16 +110,16 @@ struct raw_device_vtbl
 struct hid_device_vtbl
 {
     void (*destroy)(struct unix_device *iface);
-    NTSTATUS (*start)(struct unix_device *iface);
+    IOReturn (*start)(struct unix_device *iface);
     void (*stop)(struct unix_device *iface);
-    NTSTATUS (*haptics_start)(struct unix_device *iface, UINT duration_ms,
+    IOReturn (*haptics_start)(struct unix_device *iface, UINT duration_ms,
                               USHORT rumble_intensity, USHORT buzz_intensity,
                               USHORT left_intensity, USHORT right_intensity);
-    NTSTATUS (*haptics_stop)(struct unix_device *iface);
-    NTSTATUS (*physical_device_control)(struct unix_device *iface, USAGE control);
-    NTSTATUS (*physical_device_set_gain)(struct unix_device *iface, BYTE percent);
-    NTSTATUS (*physical_effect_control)(struct unix_device *iface, BYTE index, USAGE control, BYTE iterations);
-    NTSTATUS (*physical_effect_update)(struct unix_device *iface, BYTE index, struct effect_params *params);
+    IOReturn (*haptics_stop)(struct unix_device *iface);
+    IOReturn (*physical_device_control)(struct unix_device *iface, USAGE control);
+    IOReturn (*physical_device_set_gain)(struct unix_device *iface, BYTE percent);
+    IOReturn (*physical_effect_control)(struct unix_device *iface, BYTE index, USAGE control, BYTE iterations);
+    IOReturn (*physical_effect_update)(struct unix_device *iface, BYTE index, struct effect_params *params);
 };
 
 struct hid_report_descriptor
@@ -232,38 +235,38 @@ extern NTSTATUS iohid_bus_init(void *);
 extern NTSTATUS iohid_bus_wait(void *);
 extern NTSTATUS iohid_bus_stop(void *);
 
-extern void bus_event_cleanup(struct bus_event *event);
-extern void bus_event_queue_destroy(struct list *queue);
-extern BOOL bus_event_queue_device_removed(struct list *queue, struct unix_device *device);
-extern BOOL bus_event_queue_device_created(struct list *queue, struct unix_device *device, struct device_desc *desc);
-extern BOOL bus_event_queue_input_report(struct list *queue, struct unix_device *device,
-                                         BYTE *report, USHORT length);
-extern BOOL bus_event_queue_pop(struct list *queue, struct bus_event *event);
+extern void bus_event_cleanup(struct bus_event * event);
+extern void bus_event_queue_destroy(struct list queue);
+extern BOOL bus_event_queue_device_removed(struct list queue, struct unix_device * device);
+extern BOOL bus_event_queue_device_created(struct list queue, struct unix_device * device, struct device_desc * desc);
+extern BOOL bus_event_queue_input_report(struct list queue, struct unix_device * device,
+                                         BYTE * report, USHORT length);
+extern BOOL bus_event_queue_pop(struct list queue, struct bus_event * event);
 
-extern BOOL hid_device_begin_report_descriptor(struct unix_device *iface, const USAGE_AND_PAGE *device_usage);
-extern BOOL hid_device_end_report_descriptor(struct unix_device *iface);
+extern BOOL hid_device_begin_report_descriptor(struct unix_device * iface, const USAGE_AND_PAGE * device_usage);
+extern BOOL hid_device_end_report_descriptor(struct unix_device * iface);
 
-extern BOOL hid_device_begin_input_report(struct unix_device *iface, const USAGE_AND_PAGE *physical_usage);
-extern BOOL hid_device_end_input_report(struct unix_device *iface);
-extern BOOL hid_device_add_buttons(struct unix_device *iface, USAGE usage_page,
+extern BOOL hid_device_begin_input_report(struct unix_device * iface, const USAGE_AND_PAGE * physical_usage);
+extern BOOL hid_device_end_input_report(struct unix_device * iface);
+extern BOOL hid_device_add_buttons(struct unix_device * iface, USAGE usage_page,
                                    USAGE usage_min, USAGE usage_max);
-extern BOOL hid_device_add_hatswitch(struct unix_device *iface, INT count);
-extern BOOL hid_device_add_axes(struct unix_device *iface, BYTE count, USAGE usage_page,
-                                const USAGE *usages, BOOL rel, LONG min, LONG max);
+extern BOOL hid_device_add_hatswitch(struct unix_device * iface, INT count);
+extern BOOL hid_device_add_axes(struct unix_device * iface, BYTE count, USAGE usage_page,
+                                const USAGE * usages, BOOL rel, LONG min, LONG max);
 
-extern BOOL hid_device_add_haptics(struct unix_device *iface);
-extern BOOL hid_device_add_physical(struct unix_device *iface, USAGE *usages, USHORT count);
+extern BOOL hid_device_add_haptics(struct unix_device * iface);
+extern BOOL hid_device_add_physical(struct unix_device * iface, USAGE * usages, USHORT count);
 
-extern BOOL hid_device_set_abs_axis(struct unix_device *iface, ULONG index, LONG value);
-extern BOOL hid_device_set_rel_axis(struct unix_device *iface, ULONG index, LONG value);
-extern BOOL hid_device_set_button(struct unix_device *iface, ULONG index, BOOL is_set);
-extern BOOL hid_device_set_hatswitch_x(struct unix_device *iface, ULONG index, LONG new_x);
-extern BOOL hid_device_set_hatswitch_y(struct unix_device *iface, ULONG index, LONG new_y);
-extern BOOL hid_device_move_hatswitch(struct unix_device *iface, ULONG index, LONG x, LONG y);
+extern BOOL hid_device_set_abs_axis(struct unix_device * iface, ULONG index, LONG value);
+extern BOOL hid_device_set_rel_axis(struct unix_device * iface, ULONG index, LONG value);
+extern BOOL hid_device_set_button(struct unix_device * iface, ULONG index, BOOL is_set);
+extern BOOL hid_device_set_hatswitch_x(struct unix_device * iface, ULONG index, LONG new_x);
+extern BOOL hid_device_set_hatswitch_y(struct unix_device * iface, ULONG index, LONG new_y);
+extern BOOL hid_device_move_hatswitch(struct unix_device * iface, ULONG index, LONG x, LONG y);
 
-extern BOOL hid_device_sync_report(struct unix_device *iface);
-extern void hid_device_drop_report(struct unix_device *iface);
+extern BOOL hid_device_sync_report(struct unix_device * iface);
+extern void hid_device_drop_report(struct unix_device * iface);
 
-extern void hid_device_set_effect_state(struct unix_device *iface, BYTE index, BYTE flags);
+extern void hid_device_set_effect_state(struct unix_device * iface, BYTE index, BYTE flags);
 
 #endif /* __WINEBUS_UNIX_PRIVATE_H */

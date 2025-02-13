@@ -222,9 +222,10 @@ static inline void list_move_slice_tail( struct list *dst, struct list *begin, s
 
 /* iterate through the list using a list entry */
 #define LIST_FOR_EACH_ENTRY(elem, list, type, field) \
-    for ((elem) = LIST_ENTRY((list)->next, type, field); \
-         &(elem)->field != (list); \
-         (elem) = LIST_ENTRY((elem)->field.next, type, field))
+    for ( \
+        (elem) = LIST_ENTRY((list)->next, type, field); \
+        &(elem)->field != (list); \
+        (elem) = LIST_ENTRY((elem)->field.next, type, field));
 
 /* iterate through the list using a list entry, with safety against removal */
 #define LIST_FOR_EACH_ENTRY_SAFE(cursor, cursor2, list, type, field) \
@@ -263,8 +264,11 @@ static inline void list_move_slice_tail( struct list *dst, struct list *begin, s
 #define LIST_INIT(list)  { &(list), &(list) }
 
 /* get pointer to object containing list element */
-#undef LIST_ENTRY
-#define LIST_ENTRY(elem, type, field) \
-    ((type *)((char *)(elem) - offsetof(type, field)))
+#define container_of(ptr, type, member) ({      \
+    const typeof( ((type *)0)->member ) *__mptr = (ptr);    \
+    (type *)( (char *)__mptr - offsetof(type, member) );})
+
+#define LIST_ENTRY(ptr, type, member) \
+    container_of(ptr, type, member)
 
 #endif  /* __WINE_SERVER_LIST_H */

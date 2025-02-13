@@ -28,10 +28,10 @@
 #include <stdlib.h>
 
 #ifdef __APPLE__
-#include <CoreFoundation/CFString.h>
 #define LoadResource mac_LoadResource
 #define GetCurrentThread mac_GetCurrentThread
-#include <CoreServices/CoreServices.h>
+#include <Security/Security.h>
+#include <Metadata/Metadata.h>
 #undef LoadResource
 #undef GetCurrentThread
 #endif
@@ -503,15 +503,15 @@ static NTSTATUS search_credentials( const WCHAR *filter, struct mountmgr_credent
             CFRelease( item );
             continue;
         }
-        if (attr_list->count != 1 || attr_list->attr[0].tag != kSecServiceItemAttr)
+        if (attr_list->count != 1 || ((attr_list)) != kSecServiceItemAttr)
         {
             SecKeychainItemFreeAttributesAndData( attr_list, NULL );
             CFRelease( item );
             continue;
         }
-        TRACE( "service item: %.*s\n", (int)attr_list->attr[0].length, (char *)attr_list->attr[0].data );
+        TRACE( "service item: %.*s\n", ARRAY_SIZE(&attr_list), ((attr_list)) );
 
-        match = match_credential( attr_list->attr[0].data, attr_list->attr[0].length, filter );
+        match = match_credential( ((attr_list)), ARRAY_SIZE(&attr_list), filter );
         SecKeychainItemFreeAttributesAndData( attr_list, NULL );
         if (!match)
         {

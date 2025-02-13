@@ -144,9 +144,11 @@ extern int __ulock_wake( uint32_t operation, void *addr, uint64_t wake_value );
 
 static inline int futex_wait( const LONG *addr, int val, struct timespec *timeout )
 {
-#ifdef MAC_OS_VERSION_14_4
-    if (__builtin_available( macOS 14.4, * ))
-    {
+#if defined(MAC_OS_VERSION_14_4)
+# if !defined(__builtin_available)
+#   define __builtin_available(x) 0
+# endif
+# if __builtin_available( (macOS 14.4) )
         /* 18446744073 seconds could overflow a uint64_t in nanoseconds */
         if (timeout && timeout->tv_sec < 18446744073)
         {
@@ -163,6 +165,7 @@ static inline int futex_wait( const LONG *addr, int val, struct timespec *timeou
 
         return os_sync_wait_on_address( (void *)addr, (uint64_t)val, 4, OS_SYNC_WAIT_ON_ADDRESS_NONE );
     }
+# endif
 #endif
 
     /* 4294 seconds could overflow a uint32_t in microseconds */
@@ -183,9 +186,13 @@ static inline int futex_wait( const LONG *addr, int val, struct timespec *timeou
 
 static inline int futex_wake_one( const LONG *addr )
 {
-#ifdef MAC_OS_VERSION_14_4
-    if (__builtin_available( macOS 14.4, * ))
-        return os_sync_wake_by_address_any( (void *)addr, 4, OS_SYNC_WAKE_BY_ADDRESS_NONE );
+#if defined(MAC_OS_VERSION_14_4)
+# if !defined(__builtin_available)
+#   define __builtin_available(x) 0
+# endif
+# if __builtin_available( (macOS 14.4) )
+    return os_sync_wake_by_address_any( (void *)addr, 4, OS_SYNC_WAKE_BY_ADDRESS_NONE );
+# endif
 #endif
     return __ulock_wake( UL_COMPARE_AND_WAIT, (void *)addr, 0 );
 }

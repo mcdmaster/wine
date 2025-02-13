@@ -24,17 +24,21 @@
 #pragma makedep unix
 #endif
 
-#include <pthread.h>
-#include <assert.h>
+#include "unix_private.h"
+#include "ntuser.h"
 #include "ntstatus.h"
-#define WIN32_NO_STATUS
-#include "win32u_private.h"
-#include "ntuser_private.h"
-#include "wine/server.h"
 #include "wine/debug.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(class);
 WINE_DECLARE_DEBUG_CHANNEL(win);
+
+#define WIN32_NO_STATUS
+#include <stdint.h>
+#include <stddef.h>
+#include <stddef.h>
+#include <stdbool.h>
+#include <pthread/pthread.h>
+#include <assert.h>
 
 #define MAX_WINPROCS  4096
 #define WINPROC_PROC16  ((void *)1)  /* placeholder for 16-bit window procs */
