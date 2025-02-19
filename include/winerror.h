@@ -205,10 +205,8 @@ typedef long HRESULT;
 typedef int HRESULT;
 #endif
 #endif
-static inline HRESULT HRESULT_FROM_WIN32(unsigned int x)
-{
-    return (HRESULT)x > 0 ? ((HRESULT) ((x & 0x0000FFFF) | (FACILITY_WIN32 << 16) | 0x80000000)) : (HRESULT)x;
-}
+#define HRESULT_FROM_WIN32(x) \
+    ((HRESULT)x > 0 ? ((HRESULT) ((x & 0x0000FFFF) | (FACILITY_WIN32 << 16) | 0x80000000)) : (HRESULT)x)
 #define FACILITY_NT_BIT         0x10000000
 #define HRESULT_FROM_NT(x)      ((HRESULT) ((x) | FACILITY_NT_BIT))
 

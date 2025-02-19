@@ -24,6 +24,7 @@
 
 #include "config.h"
 
+#include "appmodel.h"
 #include <fcntl.h>
 #include <string.h>
 #include <stdarg.h>
@@ -74,6 +75,8 @@
 #include "wine/asm.h"
 #include "unix_private.h"
 #include "wine/debug.h"
+
+#define SystemWineVersionInformation 1000
 
 WINE_DEFAULT_DEBUG_CHANNEL(ntdll);
 
@@ -3657,7 +3660,7 @@ NTSTATUS WINAPI NtQuerySystemInformation( SYSTEM_INFORMATION_CLASS class,
 
     case SystemWineVersionInformation:  /* 1000 */
     {
-        static const char version[] = PACKAGE_VERSION;
+        static const char version[] = "1.0.0"; // Replace "1.0.0" with the actual version
         struct utsname buf;
 
         uname( &buf );

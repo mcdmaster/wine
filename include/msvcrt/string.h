@@ -74,27 +74,27 @@ _ACRTIMP size_t  __cdecl strxfrm(char*,const char*,size_t);
 #endif
 
 
-static inline int strcasecmp(const char* s1, const char* s2) { return _stricmp(s1, s2); }
-static inline int strcmpi(const char* s1, const char* s2) { return _strcmpi(s1, s2); }
-static inline char* strdup(const char* buf) { return _strdup(buf); }
-static inline int stricmp(const char* s1, const char* s2) { return _stricmp(s1, s2); }
-static inline int stricoll(const char* s1, const char* s2) { return _stricoll(s1, s2); }
-static inline char* strlwr(char* str) { return _strlwr(str); }
-static inline int strncasecmp(const char *str1, const char *str2, size_t n) { return _strnicmp(str1, str2, n); }
-static inline int strnicmp(const char* s1, const char* s2, size_t n) { return _strnicmp(s1, s2, n); }
-static inline char* strnset(char* str, int value, unsigned int len) { return _strnset(str, value, len); }
-static inline char* strrev(char* str) { return _strrev(str); }
-static inline char* strset(char* str, int value) { return _strset(str, value); }
-static inline char* strupr(char* str) { return _strupr(str); }
+#define strcasecmp(s1, s2) _stricmp(s1, s2)
+#define strcmpi(s1, s2) _strcmpi(s1, s2)
+#define strdup(buf) _strdup(buf)
+#define stricmp(s1, s2) _stricmp(s1, s2)
+#define stricoll(s1, s2) _stricoll(s1, s2)
+#define strlwr(str) _strlwr(str)
+#define strncasecmp(str1, str2, sizn) _strnicmp(str1, str2, n)
+#define strnicmp(s1, s2, n) _strnicmp(s1, s2, n)
+#define strnset(str, value, len) _strnset(str, value, len)
+#define strrev(str) _strrev(str)
+#define strset(str, value) _strset(str, value)
+#define strupr(str) _strupr(str)
 
-static inline wchar_t* wcsdup(const wchar_t* str) { return _wcsdup(str); }
-static inline int wcsicoll(const wchar_t* str1, const wchar_t* str2) { return _wcsicoll(str1, str2); }
-static inline wchar_t* wcslwr(wchar_t* str) { return _wcslwr(str); }
-static inline int wcsicmp(const wchar_t* s1, const wchar_t* s2) { return _wcsicmp(s1, s2); }
-static inline int wcsnicmp(const wchar_t* str1, const wchar_t* str2, size_t n) { return _wcsnicmp(str1, str2, n); }
-static inline wchar_t* wcsnset(wchar_t* str, wchar_t c, size_t n) { return _wcsnset(str, c, n); }
-static inline wchar_t* wcsrev(wchar_t* str) { return _wcsrev(str); }
-static inline wchar_t* wcsset(wchar_t* str, wchar_t c) { return _wcsset(str, c); }
-static inline wchar_t* wcsupr(wchar_t* str) { return _wcsupr(str); }
+#define wcsdup(str) _wcsdup(str)
+#define wcsicoll(str1, str2) _wcsicoll(str1, str2)
+#define wcslwr(str) _wcslwr(str)
+#define wcsicmp(s1, s2) _wcsicmp(s1, s2)
+#define wcsnicmp(str1, str2, n) _wcsnicmp(str1, str2, n)
+#define wcsnset(str, c, n) _wcsnset(str, c, n)
+#define wcsrev(str) _wcsrev(str)
+#define wcsset(str, c) _wcsset(str, c)
+#define wcsupr(str) _wcsupr(str)
 
 #endif /* __WINE_STRING_H */

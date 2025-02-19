@@ -17,29 +17,33 @@
  * License along with this library; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
  */
-
+#include "config.h"
+ 
 #ifndef _WINNT_
 #define _WINNT_
 
-#include <basetsd.h>
-#include <guiddef.h>
-#include <winapifamily.h>
-#include <specstrings.h>
-
-#ifndef RC_INVOKED
-#include <ctype.h>
-#include <stddef.h>
-#include <string.h>
+#ifdef __cplusplus
+ extern "C" {
 #endif
 
+#define WIN32_NO_STATUS
+#include "ntstatus.h"
+#include "basetsd.h"
+#include "winapifamily.h"
+#include "specstrings.h"
+#include "ntdef.h"
+#include "winternl.h"
+#include "wine/list.h"
+
+#include <stddef.h>
+#include <stdarg.h>
+#include <stdlib.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <string.h>
 
 #if defined(_MSC_VER) && (defined(__arm__) || defined(__aarch64__) || defined(__arm64ec__))
 #include <intrin.h>
-#endif
-
-
-#ifdef __cplusplus
-extern "C" {
 #endif
 
 #if defined(_NTSYSTEM_) || defined(WINE_UNIX_LIB)
@@ -497,8 +501,8 @@ typedef ULONG           UCSCHAR;
 typedef signed __int64   LONGLONG,  *PLONGLONG;
 typedef unsigned __int64 ULONGLONG, *PULONGLONG;
 # else
-typedef signed __int64   DECLSPEC_ALIGN(8) LONGLONG,   *PLONGLONG;
-typedef unsigned __int64 DECLSPEC_ALIGN(8) ULONGLONG,  *PULONGLONG;
+typedef signed __int32   DECLSPEC_ALIGN(8) LONGLONG,   *PLONGLONG;
+typedef unsigned __int32 DECLSPEC_ALIGN(8) ULONGLONG,  *PULONGLONG;
 # endif
 #endif
 
@@ -770,21 +774,18 @@ typedef enum MEM_EXTENDED_PARAMETER_TYPE {
     MemExtendedParameterMax
 } MEM_EXTENDED_PARAMETER_TYPE, *PMEM_EXTENDED_PARAMETER_TYPE;
 
-typedef struct DECLSPEC_ALIGN(8) MEM_EXTENDED_PARAMETER {
-    struct
-    {
-        DWORD64 Type : MEM_EXTENDED_PARAMETER_TYPE_BITS;
-        DWORD64 Reserved : 64 - MEM_EXTENDED_PARAMETER_TYPE_BITS;
-    } DUMMYSTRUCTNAME;
-
-    union
+typedef struct DECLSPEC_ALIGN(8) MEM_EXTENDED_PARAMETER
+{
+    DWORD64 Type : MEM_EXTENDED_PARAMETER_TYPE_BITS;
+    DWORD64 Reserved : 32;
+    union 
     {
         DWORD64 ULong64;
         PVOID Pointer;
         SIZE_T Size;
         HANDLE Handle;
         DWORD ULong;
-    } DUMMYUNIONNAME;
+    };
 } MEM_EXTENDED_PARAMETER, *PMEM_EXTENDED_PARAMETER;
 
 #define MEM_EXTENDED_PARAMETER_GRAPHICS                 0x00000001
@@ -885,9 +886,9 @@ typedef struct DECLSPEC_ALIGN(8) MEM_EXTENDED_PARAMETER {
 #define CONTAINING_RECORD(address, type, field) \
   ((type *)((PCHAR)(address) - offsetof(type, field)))
 
-#define ARRAYSIZE(x) (sizeof(&x) / sizeof((&x)[0]))
+#define ARRAYSIZE(x) (sizeof(x) / sizeof(&((x)[0])))
 #ifdef __WINESRC__
-# define ARRAY_SIZE(x) (sizeof(&x) / sizeof((&x)[0]))
+# define ARRAY_SIZE(x) (sizeof(x) / sizeof(&((x)[0])))
 #endif
 
 /* Types */
@@ -909,25 +910,26 @@ typedef struct DECLSPEC_ALIGN(16) _SLIST_ENTRY {
 
 typedef union DECLSPEC_ALIGN(16) _SLIST_HEADER {
     struct {
-        ULONGLONG Alignment;
-        ULONGLONG Region;
+        ULONG64 Alignment;
+        ULONG64 Region;
     } DUMMYSTRUCTNAME;
-    struct {
-        ULONGLONG Depth:16;
-        ULONGLONG Sequence:9;
-        ULONGLONG NextEntry:39;
-        ULONGLONG HeaderType:1;
-        ULONGLONG Init:1;
-        ULONGLONG Reserved:59;
-        ULONGLONG Region:3;
+    union TYPENAMES
+    {
+        ULONG64 Depth:16;
+        ULONG64 Sequence9;
+        ULONG64 NextEntry:16;
+        ULONG64 HeaderType:1;
+        ULONG64 Init:1;
+        ULONG64 Reserved:5;
+        ULONG64 Region:3;
     } Header8;
-    struct {
-        ULONGLONG Depth:16;
-        ULONGLONG Sequence:48;
-        ULONGLONG HeaderType:1;
-        ULONGLONG Init:1;
-        ULONGLONG Reserved:2;
-        ULONGLONG NextEntry:60;
+    union TYPENAMES_EXTENDED {
+        ULONG64 Depth:16;
+        ULONG64 Sequence:24;
+        ULONG64 HeaderType:1;
+        ULONG64 Init:1;
+        ULONG64 Reserved:2;
+        ULONG64 NextEntry:24;
     } Header16;
 } SLIST_HEADER, *PSLIST_HEADER;
 
@@ -1501,7 +1503,7 @@ typedef struct _XSAVE_AREA_HEADER
 {
     DWORD64 Mask;
     DWORD64 CompactionMask;
-    DWORD64 Reserved2[6];
+    DWORD64 Reserved2[8];
 }
 XSAVE_AREA_HEADER, *PXSAVE_AREA_HEADER;
 
@@ -1530,7 +1532,7 @@ typedef struct _XSTATE
 {
     ULONG64 Mask;
     ULONG64 CompactionMask;
-    ULONG64 Reserved[6];
+    ULONG64 Reserved[8];
     YMMCONTEXT YmmContext;
 } XSTATE, *PXSTATE;
 
@@ -1631,8 +1633,8 @@ typedef struct _ARM_CONTEXT
     union
     {
         ARM_NEON128 Q[16];
-        ULONGLONG D[32];
-        ULONG S[32];
+        ULONGLONG D[36];
+        ULONG S[36];
     } DUMMYUNIONNAME;               /* 050 */
     /* CONTEXT_DEBUG_REGISTERS */
     ULONG Bvr[ARM_MAX_BREAKPOINTS]; /* 150 */
@@ -1856,106 +1858,103 @@ typedef struct DECLSPEC_ALIGN(16) _ARM64EC_NT_CONTEXT
 {
     union
     {
+        DWORD64 AMD64_P1Home;                         /* 000 */
+        DWORD64 AMD64_P2Home;                         /* 008 */
+        DWORD64 AMD64_P3Home;                         /* 010 */
+        DWORD64 AMD64_P4Home;                         /* 018 */
+        DWORD64 AMD64_P5Home;                         /* 020 */
+        DWORD64 AMD64_P6Home;                         /* 028 */
+        DWORD   ContextFlags;                         /* 030 */
+        DWORD   AMD64_MxCsr_copy;                     /* 034 */
+        WORD    AMD64_SegCs;                          /* 038 */
+        WORD    AMD64_SegDs;                          /* 03a */
+        WORD    AMD64_SegEs;                          /* 03c */
+        WORD    AMD64_SegFs;                          /* 03e */
+        WORD    AMD64_SegGs;                          /* 040 */
+        WORD    AMD64_SegSs;                          /* 042 */
+        DWORD   AMD64_EFlags;                         /* 044 */
+        DWORD64 AMD64_Dr0;                            /* 048 */
+        DWORD64 AMD64_Dr1;                            /* 050 */
+        DWORD64 AMD64_Dr2;                            /* 058 */
+        DWORD64 AMD64_Dr3;                            /* 060 */
+        DWORD64 AMD64_Dr6;                            /* 068 */
+        DWORD64 AMD64_Dr7;                            /* 070 */
+        DWORD64 X8;                                   /* 078 (Rax) */
+        DWORD64 X0;                                   /* 080 (Rcx) */
+        DWORD64 X1;                                   /* 088 (Rdx) */
+        DWORD64 X27;                                  /* 090 (Rbx) */
+        DWORD64 Sp;                                   /* 098 (Rsp) */
+        DWORD64 Fp;                                   /* 0a0 (Rbp) */
+        DWORD64 X25;                                  /* 0a8 (Rsi) */
+        DWORD64 X26;                                  /* 0b0 (Rdi) */
+        DWORD64 X2;                                   /* 0b8 (R8)  */
+        DWORD64 X3;                                   /* 0c0 (R9)  */
+        DWORD64 X4;                                   /* 0c8 (R10) */
+        DWORD64 X5;                                   /* 0d0 (R11) */
+        DWORD64 X19;                                  /* 0d8 (R12) */
+        DWORD64 X20;                                  /* 0e0 (R13) */
+        DWORD64 X21;                                  /* 0e8 (R14) */
+        DWORD64 X22;                                  /* 0f0 (R15) */
+        DWORD64 Pc;                                   /* 0f8 (Rip) */
         struct
         {
-            DWORD64 AMD64_P1Home;                         /* 000 */
-            DWORD64 AMD64_P2Home;                         /* 008 */
-            DWORD64 AMD64_P3Home;                         /* 010 */
-            DWORD64 AMD64_P4Home;                         /* 018 */
-            DWORD64 AMD64_P5Home;                         /* 020 */
-            DWORD64 AMD64_P6Home;                         /* 028 */
-            DWORD   ContextFlags;                         /* 030 */
-            DWORD   AMD64_MxCsr_copy;                     /* 034 */
-            WORD    AMD64_SegCs;                          /* 038 */
-            WORD    AMD64_SegDs;                          /* 03a */
-            WORD    AMD64_SegEs;                          /* 03c */
-            WORD    AMD64_SegFs;                          /* 03e */
-            WORD    AMD64_SegGs;                          /* 040 */
-            WORD    AMD64_SegSs;                          /* 042 */
-            DWORD   AMD64_EFlags;                         /* 044 */
-            DWORD64 AMD64_Dr0;                            /* 048 */
-            DWORD64 AMD64_Dr1;                            /* 050 */
-            DWORD64 AMD64_Dr2;                            /* 058 */
-            DWORD64 AMD64_Dr3;                            /* 060 */
-            DWORD64 AMD64_Dr6;                            /* 068 */
-            DWORD64 AMD64_Dr7;                            /* 070 */
-            DWORD64 X8;                                   /* 078 (Rax) */
-            DWORD64 X0;                                   /* 080 (Rcx) */
-            DWORD64 X1;                                   /* 088 (Rdx) */
-            DWORD64 X27;                                  /* 090 (Rbx) */
-            DWORD64 Sp;                                   /* 098 (Rsp) */
-            DWORD64 Fp;                                   /* 0a0 (Rbp) */
-            DWORD64 X25;                                  /* 0a8 (Rsi) */
-            DWORD64 X26;                                  /* 0b0 (Rdi) */
-            DWORD64 X2;                                   /* 0b8 (R8)  */
-            DWORD64 X3;                                   /* 0c0 (R9)  */
-            DWORD64 X4;                                   /* 0c8 (R10) */
-            DWORD64 X5;                                   /* 0d0 (R11) */
-            DWORD64 X19;                                  /* 0d8 (R12) */
-            DWORD64 X20;                                  /* 0e0 (R13) */
-            DWORD64 X21;                                  /* 0e8 (R14) */
-            DWORD64 X22;                                  /* 0f0 (R15) */
-            DWORD64 Pc;                                   /* 0f8 (Rip) */
-            struct
-            {
-                WORD    AMD64_ControlWord;                /* 100 */
-                WORD    AMD64_StatusWord;                 /* 102 */
-                BYTE    AMD64_TagWord;                    /* 104 */
-                BYTE    AMD64_Reserved1;                  /* 105 */
-                WORD    AMD64_ErrorOpcode;                /* 106 */
-                DWORD   AMD64_ErrorOffset;                /* 108 */
-                WORD    AMD64_ErrorSelector;              /* 10c */
-                WORD    AMD64_Reserved2;                  /* 10e */
-                DWORD   AMD64_DataOffset;                 /* 110 */
-                WORD    AMD64_DataSelector;               /* 114 */
-                WORD    AMD64_Reserved3;                  /* 116 */
-                DWORD   AMD64_MxCsr;                      /* 118 */
-                DWORD   AMD64_MxCsr_Mask;                 /* 11c */
-                DWORD64 Lr;                               /* 120 (FloatRegisters[0]) */
-                WORD    X16_0;                            /* 128 */
-                WORD    AMD64_St0_Reserved1;              /* 12a */
-                DWORD   AMD64_St0_Reserved2;              /* 12c */
-                DWORD64 X6;                               /* 130 (FloatRegisters[1]) */
-                WORD    X16_1;                            /* 138 */
-                WORD    AMD64_St1_Reserved1;              /* 13a */
-                DWORD   AMD64_St1_Reserved2;              /* 13c */
-                DWORD64 X7;                               /* 140 (FloatRegisters[2]) */
-                WORD    X16_2;                            /* 148 */
-                WORD    AMD64_St2_Reserved1;              /* 14a */
-                DWORD   AMD64_St2_Reserved2;              /* 14c */
-                DWORD64 X9;                               /* 150 (FloatRegisters[3]) */
-                WORD    X16_3;                            /* 158 */
-                WORD    AMD64_St3_Reserved1;              /* 15a */
-                DWORD   AMD64_St3_Reserved2;              /* 15c */
-                DWORD64 X10;                              /* 160 (FloatRegisters[4]) */
-                WORD    X17_0;                            /* 168 */
-                WORD    AMD64_St4_Reserved1;              /* 16a */
-                DWORD   AMD64_St4_Reserved2;              /* 16c */
-                DWORD64 X11;                              /* 170 (FloatRegisters[5]) */
-                WORD    X17_1;                            /* 178 */
-                WORD    AMD64_St5_Reserved1;              /* 17a */
-                DWORD   AMD64_St5_Reserved2;              /* 17c */
-                DWORD64 X12;                              /* 180 (FloatRegisters[6]) */
-                WORD    X17_2;                            /* 188 */
-                WORD    AMD64_St6_Reserved1;              /* 18a */
-                DWORD   AMD64_St6_Reserved2;              /* 18c */
-                DWORD64 X15;                              /* 190 (FloatRegisters[7]) */
-                WORD    X17_3;                            /* 198 */
-                WORD    AMD64_St7_Reserved1;              /* 19a */
-                DWORD   AMD64_St7_Reserved2;              /* 19c */
-                ARM64_NT_NEON128 V[16];                   /* 1a0 (XmmRegisters) */
-                BYTE    AMD64_XSAVE_FORMAT_Reserved4[96]; /* 2a0 */
-            } DUMMYSTRUCTNAME;
-            M128A   AMD64_VectorRegister[26];             /* 300 */
-            DWORD64 AMD64_VectorControl;                  /* 4a0 */
-            DWORD64 AMD64_DebugControl;                   /* 4a8 */
-            DWORD64 AMD64_LastBranchToRip;                /* 4b0 */
-            DWORD64 AMD64_LastBranchFromRip;              /* 4b8 */
-            DWORD64 AMD64_LastExceptionToRip;             /* 4c0 */
-            DWORD64 AMD64_LastExceptionFromRip;           /* 4c8 */
-        } DUMMYSTRUCTNAME;
-        AMD64_CONTEXT AMD64_Context;
-    } DUMMYUNIONNAME;
+            WORD    AMD64_ControlWord;                /* 100 */
+            WORD    AMD64_StatusWord;                 /* 102 */
+            BYTE    AMD64_TagWord;                    /* 104 */
+            BYTE    AMD64_Reserved1;                  /* 105 */
+            WORD    AMD64_ErrorOpcode;                /* 106 */
+            DWORD   AMD64_ErrorOffset;                /* 108 */
+            WORD    AMD64_ErrorSelector;              /* 10c */
+            WORD    AMD64_Reserved2;                  /* 10e */
+            DWORD   AMD64_DataOffset;                 /* 110 */
+            WORD    AMD64_DataSelector;               /* 114 */
+            WORD    AMD64_Reserved3;                  /* 116 */
+            DWORD   AMD64_MxCsr;                      /* 118 */
+            DWORD   AMD64_MxCsr_Mask;                 /* 11c */
+            DWORD64 Lr;                               /* 120 (FloatRegisters[0]) */
+            WORD    X16_0;                            /* 128 */
+            WORD    AMD64_St0_Reserved1;              /* 12a */
+            DWORD   AMD64_St0_Reserved2;              /* 12c */
+            DWORD64 X6;                               /* 130 (FloatRegisters[1]) */
+            WORD    X16_1;                            /* 138 */
+            WORD    AMD64_St1_Reserved1;              /* 13a */
+            DWORD   AMD64_St1_Reserved2;              /* 13c */
+            DWORD64 X7;                               /* 140 (FloatRegisters[2]) */
+            WORD    X16_2;                            /* 148 */
+            WORD    AMD64_St2_Reserved1;              /* 14a */
+            DWORD   AMD64_St2_Reserved2;              /* 14c */
+            DWORD64 X9;                               /* 150 (FloatRegisters[3]) */
+            WORD    X16_3;                            /* 158 */
+            WORD    AMD64_St3_Reserved1;              /* 15a */
+            DWORD   AMD64_St3_Reserved2;              /* 15c */
+            DWORD64 X10;                              /* 160 (FloatRegisters[4]) */
+            WORD    X17_0;                            /* 168 */
+            WORD    AMD64_St4_Reserved1;              /* 16a */
+            DWORD   AMD64_St4_Reserved2;              /* 16c */
+            DWORD64 X11;                              /* 170 (FloatRegisters[5]) */
+            WORD    X17_1;                            /* 178 */
+            WORD    AMD64_St5_Reserved1;              /* 17a */
+            DWORD   AMD64_St5_Reserved2;              /* 17c */
+            DWORD64 X12;                              /* 180 (FloatRegisters[6]) */
+            WORD    X17_2;                            /* 188 */
+            WORD    AMD64_St6_Reserved1;              /* 18a */
+            DWORD   AMD64_St6_Reserved2;              /* 18c */
+            DWORD64 X15;                              /* 190 (FloatRegisters[7]) */
+            WORD    X17_3;                            /* 198 */
+            WORD    AMD64_St7_Reserved1;              /* 19a */
+            DWORD   AMD64_St7_Reserved2;              /* 19c */
+            ARM64_NT_NEON128 V[16];                   /* 1a0 (XmmRegisters) */
+            BYTE    AMD64_XSAVE_FORMAT_Reserved4[96]; /* 2a0 */
+        };
+        M128A   AMD64_VectorRegister[26];             /* 300 */
+        DWORD64 AMD64_VectorControl;                  /* 4a0 */
+        DWORD64 AMD64_DebugControl;                   /* 4a8 */
+        DWORD64 AMD64_LastBranchToRip;                /* 4b0 */
+        DWORD64 AMD64_LastBranchFromRip;              /* 4b8 */
+        DWORD64 AMD64_LastExceptionToRip;             /* 4c0 */
+        DWORD64 AMD64_LastExceptionFromRip;           /* 4c8 */
+    };
+    AMD64_CONTEXT AMD64_Context;
 } ARM64EC_NT_CONTEXT, *PARM64EC_NT_CONTEXT;
 
 #ifdef __aarch64__
@@ -2013,7 +2012,7 @@ typedef ARM64_NT_CONTEXT CONTEXT, *PCONTEXT;
 struct _EXCEPTION_POINTERS;
 struct _EXCEPTION_RECORD;
 
-typedef EXCEPTION_DISPOSITION WINAPI EXCEPTION_ROUTINE(struct _EXCEPTION_RECORD*,PVOID,CONTEXT*,PVOID);
+typedef EXCEPTION_DISPOSITION WINAPI *EXCEPTION_ROUTINE (struct _EXCEPTION_RECORD *ExceptionRecord, PVOID EstablisherFrame, PVOID ContextRecord, PVOID DispatcherContext);
 typedef EXCEPTION_ROUTINE *PEXCEPTION_ROUTINE;
 
 typedef struct _DISPATCHER_CONTEXT_ARM64
@@ -2393,7 +2392,7 @@ typedef struct _EXCEPTION_RECORD64
 typedef struct _EXCEPTION_POINTERS
 {
   PEXCEPTION_RECORD  ExceptionRecord;
-  PCONTEXT           ContextRecord;
+  PVOID              ContextRecord;
 } EXCEPTION_POINTERS, *PEXCEPTION_POINTERS;
 
 
@@ -2406,7 +2405,7 @@ typedef struct _EXCEPTION_POINTERS
 struct _EXCEPTION_REGISTRATION_RECORD;
 
 typedef DWORD (CDECL *PEXCEPTION_HANDLER)(PEXCEPTION_RECORD,struct _EXCEPTION_REGISTRATION_RECORD*,
-                                          PCONTEXT,struct _EXCEPTION_REGISTRATION_RECORD **);
+                                          PVOID,struct _EXCEPTION_REGISTRATION_RECORD **);
 
 typedef struct _EXCEPTION_REGISTRATION_RECORD
 {
@@ -2467,12 +2466,12 @@ static FORCEINLINE struct _TEB * WINAPI NtCurrentTeb(void)
 {
     return (struct _TEB *)__getReg(18);
 }
-#elif defined(__x86_64__) && defined(__GNUC__)
-static FORCEINLINE struct _TEB * WINAPI NtCurrentTeb(void)
-{
-    struct _TEB *teb;
-    __asm__("movq %%gs:0x30,%0" : "=r" (teb));
-    return teb;
+#elif defined(__x86_64__) && defined(__GNUC__) || defined(__APPLE__)
+#define static FORCEINLINE struct _TEB * WINAPI NtCurrentTeb(void) \
+{ \
+    struct _TEB *teb; \
+    __asm__("movq %%gs:0x30,%0" : "=r" (teb)); \
+    return teb; \
 }
 #elif defined(__x86_64__) && defined(_MSC_VER)
 unsigned __int64 __readgsqword(unsigned long);
@@ -6139,12 +6138,11 @@ NTSYSAPI SIZE_T WINAPI RtlCompareMemoryUlong(VOID*, SIZE_T, ULONG);
 #define RtlFillMemory(Destination, Length, Fill) memset((Destination),(Fill),(Length))
 #define RtlZeroMemory(Destination, Length) memset((Destination),0,(Length))
 
-static FORCEINLINE void *RtlSecureZeroMemory(void *buffer, SIZE_T length)
-{
-    volatile char *ptr = (volatile char *)buffer;
-
-    while (length--) *ptr++ = 0;
-    return buffer;
+#define RtlSecureZeroMemory(buffer, length) \
+{ \
+    volatile char *ptr = (volatile char *)buffer; \
+    while (length--) *ptr++ = 0; \
+    return buffer; \
 }
 
 #include <guiddef.h>
@@ -7384,17 +7382,17 @@ static FORCEINLINE unsigned char InterlockedCompareExchange128( volatile __int64
 
 #endif /* _WIN64 */
 
-static FORCEINLINE void YieldProcessor(void)
-{
-#if defined(__GNUC__) || defined(__clang__)
-#if defined(__arm__) || defined(__aarch64__) || defined(__arm64ec__)
-    __asm__ __volatile__( "dmb ishst\n\tyield" : : : "memory" );
-#elif defined(__i386__) || defined(__x86_64__)
-    __asm__ __volatile__( "rep; nop" : : : "memory" );
-#else
-    __asm__ __volatile__( "" : : : "memory" );
-#endif
-#endif
+#define YieldProcessor \
+{ \
+#if defined(__GNUC__) || defined(__clang__) \
+#if defined(__arm__) || defined(__aarch64__) || defined(__arm64ec__) \
+    __asm__ __volatile__( "dmb ishst\n\tyield" : : : "memory" ); \
+#elif defined(__i386__) || defined(__x86_64__) \
+    __asm__ __volatile__( "rep; nop" : : : "memory" ); \
+#else \
+    __asm__ __volatile__( "" : : : "memory" ); \
+#endif \
+#endif \
 }
 
 #ifdef __cplusplus

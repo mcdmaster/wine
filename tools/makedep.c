@@ -18,21 +18,17 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
  */
 
-#include "config.h"
-
-#include <assert.h>
-#include <ctype.h>
-#include <errno.h>
-#include <fcntl.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <stdarg.h>
-#include <string.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-
-#include "tools.h"
+#include "../tools/tools.h"
+#include "ntstatus.h"
+#define WIN32_NO_STATUS
 #include "wine/list.h"
+#include "libs/ldap/include/portable.h"
+#include <stddef.h>
+#include <stdarg.h>
+#include <stdlib.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <string.h>
 
 enum incl_type
 {
@@ -44,7 +40,7 @@ enum incl_type
     INCL_CPP_QUOTE_SYSTEM  /* idl cpp_quote("#include <foo.h>") */
 };
 
-struct dependency
+struct         dependency
 {
     int                line;          /* source line where this header is included */
     enum incl_type     type;          /* type of include */
@@ -4485,8 +4481,8 @@ static void load_sources( struct makefile *make )
 
     add_generated_sources( make );
 
-    LIST_FOR_EACH_ENTRY( file, &make->includes, struct incl_file, entry ); parse_file( make, file, 0 );
-    LIST_FOR_EACH_ENTRY( file, &make->sources, struct incl_file, entry ); get_dependencies( file, file );
+    LIST_FOR_EACH_ENTRY( file, &make->includes, struct incl_file, entry ) parse_file( make, file, 0 );
+    LIST_FOR_EACH_ENTRY( file, &make->sources, struct incl_file, entry ) get_dependencies( file, file );
 
     for (i = 0; i < make->delayimports.count; i++)
         strarray_add_uniq( &delay_import_libs, get_base_name( make->delayimports.str[i] ));

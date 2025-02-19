@@ -184,7 +184,7 @@ const char *find_binary( struct strarray prefix, const char *name )
     for (i = 0; i < dirs.count; i++)
     {
         struct stat st;
-        char *prog = strmake( "%s/%s%s", dirs.str[i], file_name, EXEEXT );
+        char *prog = strmake( "%s/%s%s", dirs.str[i], file_name, "" );
         if (stat( prog, &st ) == 0 && S_ISREG( st.st_mode ) && (st.st_mode & 0111))
             return args ? strmake( "%s %s", prog, args ) : prog;
         free( prog );

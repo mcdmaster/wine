@@ -497,7 +497,9 @@ static void option_callback( int optc, char *optarg )
         set_subsystem( optarg, main_spec );
         break;
     case LONG_OPT_VERSION:
-        printf( "winebuild version " PACKAGE_VERSION "\n" );
+#if defined(PACKAGE_VERSION)
+        printf( "winebuild version %s\n", xstrdup( PACKAGE_VERSION ) );
+#endif
         exit(0);
     case LONG_OPT_WITHOUT_DLLTOOL:
         use_dlltool = 0;

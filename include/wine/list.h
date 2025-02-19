@@ -21,7 +21,17 @@
 #ifndef __WINE_SERVER_LIST_H
 #define __WINE_SERVER_LIST_H
 
+#include "../tools/tools.h"
+#include "../libs/ldap/include/portable.h"
+#include "ntstatus.h"
+#define WIN32_NO_STATUS
+#include "ntdef.h"
 #include <stddef.h>
+#include <stdint.h>
+#include <stdarg.h>
+#include <stdlib.h>
+#include <ctype.h>
+#include <sys/types.h>
 
 struct list
 {
@@ -222,10 +232,18 @@ static inline void list_move_slice_tail( struct list *dst, struct list *begin, s
 
 /* iterate through the list using a list entry */
 #define LIST_FOR_EACH_ENTRY(elem, list, type, field) \
-    for ( \
-        (elem) = LIST_ENTRY((list)->next, type, field); \
-        &(elem)->field != (list); \
-        (elem) = LIST_ENTRY((elem)->field.next, type, field));
+for ( \
+    elem = LIST_ENTRY((list)->next, type, field); \
+    &(elem)->field != (list); \
+    elem = LIST_ENTRY((elem)->field.next, type, field) \
+)
+/*
+    while ( \
+        &((elem) = LIST_ENTRY( \
+            (elem) ? (elem)->field.next : (list)->next, type, field \
+        ))->field != (list) \
+    )
+*/
 
 /* iterate through the list using a list entry, with safety against removal */
 #define LIST_FOR_EACH_ENTRY_SAFE(cursor, cursor2, list, type, field) \
@@ -264,11 +282,9 @@ static inline void list_move_slice_tail( struct list *dst, struct list *begin, s
 #define LIST_INIT(list)  { &(list), &(list) }
 
 /* get pointer to object containing list element */
-#define container_of(ptr, type, member) ({      \
-    const typeof( ((type *)0)->member ) *__mptr = (ptr);    \
-    (type *)( (char *)__mptr - offsetof(type, member) );})
-
-#define LIST_ENTRY(ptr, type, member) \
-    container_of(ptr, type, member)
+#define CONTAINING_RECORD(ptr, type, member) \
+    ((type *)((char *)(ptr) - (char *)(&((type *)0)->member)))
+#undef LIST_ENTRY
+#define LIST_ENTRY(ptr, type, member)   CONTAINING_RECORD(ptr, type, member)
 
 #endif  /* __WINE_SERVER_LIST_H */

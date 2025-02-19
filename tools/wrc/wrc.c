@@ -20,6 +20,7 @@
  */
 
 #include "config.h"
+#include "appmodel.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -76,7 +77,7 @@ static const char usage[] =
 	"with -o, then the output is written to \"wrc.tab.res\"\n"
 	;
 
-static const char version_string[] = "Wine Resource Compiler version " PACKAGE_VERSION "\n"
+static const char version_string[] = "Wine Resource Compiler version 1.0.0\n"
 			"Copyright 1998-2000 Bertho A. Stultiens\n"
 			"          1994 Martin von Loewis\n";
 
@@ -194,7 +195,7 @@ static const struct long_option long_options[] = {
 
 static void set_version_defines(void)
 {
-    char *version = xstrdup( PACKAGE_VERSION );
+    char *version = strdup("1.0.0");
     char *major, *minor, *patchlevel;
     char buffer[100];
 

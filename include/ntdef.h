@@ -73,11 +73,10 @@ typedef struct _RTL_BALANCED_NODE
             struct _RTL_BALANCED_NODE *Right;
         } DUMMYSTRUCTNAME;
     } DUMMYUNIONNAME;
-
     union
     {
-        UCHAR Red : 1;
-        UCHAR Balance : 2;
+        UCHAR Red [1];
+        UCHAR Balance [2];
         ULONG_PTR ParentValue;
     } DUMMYUNIONNAME2;
 } RTL_BALANCED_NODE, *PRTL_BALANCED_NODE;

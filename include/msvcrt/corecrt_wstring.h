@@ -24,8 +24,10 @@ _ACRTIMP void*   __cdecl _memccpy(void*,const void*,int,size_t);
 _ACRTIMP int     __cdecl _memicmp(const void*,const void*,size_t);
 _ACRTIMP int     __cdecl _memicmp_l(const void*,const void*,size_t,_locale_t);
 
-static inline int memicmp(const void* s1, const void* s2, size_t len) { return _memicmp(s1, s2, len); }
-static inline void* memccpy(void *s1, const void *s2, int c, size_t n) { return _memccpy(s1, s2, c, n); }
+// static inline int memicmp(const void* s1, const void* s2, size_t len) { return _memicmp(s1, s2, len); }
+// static inline void* memccpy(void *s1, const void *s2, int c, size_t n) { return _memccpy(s1, s2, c, n); }
+#define memicmp(s1, s2, len)    _memicmp(s1, s2, len)
+#define memccpy(s1, s2, c, n)   _memccpy(s1, s2, c, n)
 #endif /* _CRT_MEMORY_DEFINED */
 
 _ACRTIMP void*   __cdecl memmove(void*,const void*,size_t);
@@ -75,7 +77,8 @@ _ACRTIMP size_t   __cdecl wcsxfrm(wchar_t*,const wchar_t*,size_t);
 
 #ifdef _UCRT
 _ACRTIMP wchar_t* __cdecl wcstok(wchar_t*,const wchar_t*,wchar_t**);
-static inline wchar_t* _wcstok(wchar_t* str, const wchar_t *delim) { return wcstok(str, delim, NULL); }
+// static inline wchar_t* _wcstok(wchar_t* str, const wchar_t *delim) { return wcstok(str, delim, NULL); }
+#define _wcstok(str, delim) wcstok(str, delim, NULL)
 #  ifdef __cplusplus
 extern "C++" inline wchar_t* wcstok(wchar_t* str, const wchar_t *delim) { return wcstok(str, delim, NULL); }
 #  elif defined(_CRT_NON_CONFORMING_WCSTOK)

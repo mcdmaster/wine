@@ -54,10 +54,14 @@ _ACRTIMP int __cdecl toupper(int);
 }
 #endif
 
-
+/*
 static inline int isascii(int c) { return __isascii(c); }
 static inline int iscsym(int c) { return __iscsym(c); }
 static inline int iscsymf(int c) { return __iscsymf(c); }
 static inline int toascii(int c) { return __toascii(c); }
-
+*/
+#define isascii(c)  __isascii(c)
+#define iscsym(c)   __iscsym(c)
+#define iscsymf(c)  __iscsymf(c)
+#define toascii(c)  __toascii(c)
 #endif /* __WINE_CTYPE_H */

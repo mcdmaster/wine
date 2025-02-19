@@ -2817,7 +2817,7 @@ int create_msft_typelib(typelib_t *typelib)
      * - a string representation of those
      */
     cur_time = 2147483647;
-    snprintf(info_string, sizeof(info_string), "Created by WIDL version %s at %s", PACKAGE_VERSION, asctime(gmtime(&cur_time)));
+    snprintf(info_string, sizeof(info_string), "Created by WIDL version %s at %s", "1.0.0", asctime(gmtime(&cur_time)));
     set_custdata(msft, &midl_info_guid, VT_BSTR, info_string, &msft->typelib_header.CustomDataOffset);
     set_custdata(msft, &midl_time_guid, VT_UI4, &cur_time, &msft->typelib_header.CustomDataOffset);
     set_custdata(msft, &midl_version_guid, VT_UI4, &version, &msft->typelib_header.CustomDataOffset);

@@ -16,6 +16,7 @@
  * License along with this library; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
  */
+#include "config.h"
 
 #if defined(__cplusplus)
 extern "C" 
@@ -27,7 +28,7 @@ extern "C"
 #endif
 
 #define _WIN32
-#include "libs/vkd3d/include/private/vkd3d_common.h"
+#include "../../libs/vkd3d/include/private/vkd3d_common.h"
 #if defined(__APPLE__)
 # undef _WIN32
 #endif

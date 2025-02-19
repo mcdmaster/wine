@@ -17,7 +17,7 @@
  * License along with this library; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
  */
-
+#include "config.h"
 #ifndef __WINE_TOOLS_H
 #define __WINE_TOOLS_H
 
@@ -36,9 +36,9 @@
 #include <fcntl.h>
 #include <time.h>
 #include <errno.h>
-#ifdef HAVE_SYS_SYSCTL_H
-# include <sys/sysctl.h>
-#endif
+// #ifdef HAVE_SYS_SYSCTL_H
+// # include <sys/sysctl.h>
+// #endif
 
 #ifdef _WIN32
 # include <direct.h>
@@ -87,7 +87,7 @@ extern char **environ;
 #endif
 
 #ifndef ARRAY_SIZE
-#define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
+#define ARRAY_SIZE(x) (sizeof(x) / sizeof(&((x)[0])))
 #endif
 
 struct target
@@ -480,7 +480,7 @@ static inline struct target get_default_target(void)
     struct target target;
 #ifdef __i386__
     target.cpu = CPU_i386;
-#elif defined(__x86_64__)
+#elif defined(__x86_64__) || defined(__APPLE__)
     target.cpu = CPU_x86_64;
 #elif defined(__arm__)
     target.cpu = CPU_ARM;

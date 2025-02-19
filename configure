@@ -10402,7 +10402,7 @@ fi
         *)    llvm_target=$wine_arch-windows ;;
         esac
     fi
-    llvm_extra_cflags="-target $llvm_target -fuse-ld=lld"
+    llvm_extra_cflags="-target $llvm_target -fuse-ld=ld.bfd"
     llvm_extra_ldflags=""
     llvm_cflags=""
     case $llvm_target in

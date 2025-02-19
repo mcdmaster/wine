@@ -253,7 +253,7 @@ static const struct
     { "gcc",     "clang --driver-mode=gcc", CC },
     { "g++",     "clang --driver-mode=g++", CXX },
     { "cpp",     "clang --driver-mode=cpp", CPP },
-    { "ld",      "ld.lld",                  LD },
+    { "ld",      "ld64.lld",                  LD },
     { "objcopy", "llvm-objcopy" },
 };
 
@@ -301,7 +301,7 @@ static struct strarray build_tool_name( struct options *opts, const char *target
             strarray_add( &ret, target );
         }
         strarray_add( &ret, "-Wno-unused-command-line-argument" );
-        strarray_add( &ret, "-fuse-ld=lld" );
+        strarray_add( &ret, "-fuse-ld=ld.bfd" );
         if (opts->no_default_config) strarray_add( &ret, "--no-default-config" );
     }
     return ret;
@@ -824,11 +824,11 @@ static struct strarray get_winebuild_args( struct options *opts, const char *tar
     if (opts->winebuild)
         binary = opts->winebuild;
     else if (opts->wine_objdir)
-        binary = strmake( "%s/tools/winebuild/winebuild%s", opts->wine_objdir, EXEEXT );
+        binary = strmake( "%s/tools/winebuild/winebuild%s", opts->wine_objdir, "" );
     else if (winebuild)
         binary = find_binary( opts->prefix, winebuild );
     else if (bindir)
-        binary = strmake( "%s/winebuild%s", bindir, EXEEXT );
+        binary = strmake( "%s/winebuild%s", bindir, "" );
     else
         binary = find_binary( opts->prefix, "winebuild" );
     if (!binary) error( "Could not find winebuild\n" );

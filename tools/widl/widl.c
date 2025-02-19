@@ -21,21 +21,33 @@
 
 #include "config.h"
 
+#define BINDIR  "."
+#define LIBDIR  "."
+#define INCLUDEDIR  "."
+
+#include "widl.h"
+#include "utils.h"
+#include "parser.h"
+// #include "wrc/wpp_private.h"
+// #include "tools/tools.h"
+#include "header.h"
+
+#if defined(PACKAGE_VERSION)
+# undef PACKAGE_VERSION
+#endif
+#define PACKAGE_VERSION   ""
+
 #include <errno.h>
 #include <limits.h>
 #include <stdio.h>
+#include <stdarg.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
 #include <ctype.h>
 #include <limits.h>
 #include <sys/types.h>
-
-#include "widl.h"
-#include "utils.h"
-#include "parser.h"
-#include "wpp_private.h"
-#include "header.h"
 
 static const char usage[] =
 "Usage: widl [options...] infile.idl\n"
@@ -86,8 +98,7 @@ static const char usage[] =
 "    * 0x20 Preprocessor yacc trace\n"
 ;
 
-static const char version_string[] = "Wine IDL Compiler version " PACKAGE_VERSION "\n"
-			"Copyright 2002 Ove Kaaven\n";
+static char version_string[256];
 
 struct target target = { 0 };
 
@@ -331,8 +342,8 @@ void write_dlldata(const statement_list_t *stmts)
 
   dlldata = fopen(dlldata_name, "r");
   if (dlldata) {
-    static const char marker[] = "REFERENCE_PROXY_FILE";
-    static const char delegation_define[] = "#define PROXY_DELEGATION";
+    const char *marker = "REFERENCE_PROXY_FILE";
+    const char *delegation_define = "#define PROXY_DELEGATION";
     char *line = NULL;
     size_t len = 0;
 
@@ -635,7 +646,7 @@ static void option_callback( int optc, char *optarg )
 
 int open_typelib( const char *name )
 {
-    static const char *default_dirs[] = { LIBDIR "/wine", "/usr/lib/wine", "/usr/local/lib/wine" };
+    char *default_dirs = { LIBDIR "/wine", "/usr/lib/wine", "/usr/local/lib/wine" };
     struct target win_target = { target.cpu, PLATFORM_WINDOWS };
     const char *pe_dir = get_arch_dir( win_target );
     int fd;
@@ -671,8 +682,8 @@ int open_typelib( const char *name )
         }
         for (i = 0; i < ARRAY_SIZE(default_dirs); i++)
         {
-            if (i && !strcmp( default_dirs[i], default_dirs[0] )) continue;
-            TRYOPEN( strmake( "%s%s/%s", default_dirs[i], pe_dir, name ));
+            if (i && !strcmp( &default_dirs[i], &default_dirs[0] )) continue;
+            TRYOPEN( strmake( "%c%s/%s", default_dirs[i], pe_dir, name ));
         }
     }
     error( "cannot find %s\n", name );
@@ -693,11 +704,11 @@ int main(int argc,char *argv[])
 
   now = time(NULL);
 
-  files = parse_options( argc, argv, short_options, long_options, 1, option_callback );
+  snprintf(version_string, sizeof(version_string), "Wine IDL Compiler version %s\nCopyright 2002 Ove Kaaven\n", PACKAGE_VERSION);
 
   if (stdinc)
   {
-      static const char *incl_dirs[] = { INCLUDEDIR, "/usr/include", "/usr/local/include" };
+      const char *incl_dirs[] = { "/usr/include/wine", "/usr/include", "/usr/local/include" };
 
       if (includedir)
       {

@@ -101,11 +101,11 @@ typedef signed __int64   LONG64, *PLONG64;
 typedef unsigned __int64 ULONG64, *PULONG64;
 typedef unsigned __int64 DWORD64, *PDWORD64;
 #else
-typedef signed __int64   DECLSPEC_ALIGN(8) INT64, *PINT64;
-typedef unsigned __int64 DECLSPEC_ALIGN(8) UINT64, *PUINT64;
-typedef signed __int64   DECLSPEC_ALIGN(8) LONG64, *PLONG64;
-typedef unsigned __int64 DECLSPEC_ALIGN(8) ULONG64, *PULONG64;
-typedef unsigned __int64 DECLSPEC_ALIGN(8) DWORD64, *PDWORD64;
+typedef __int32 DECLSPEC_ALIGN(8) INT64, *PINT64;
+typedef unsigned __int32 DECLSPEC_ALIGN(8) UINT64, *PUINT64;
+typedef signed __int32   DECLSPEC_ALIGN(8) LONG64, *PLONG64;
+typedef unsigned __int32 DECLSPEC_ALIGN(8) ULONG64, *PULONG64;
+typedef unsigned __int32 DECLSPEC_ALIGN(8) DWORD64, *PDWORD64;
 #endif
 
 /* Basic pointer-sized integer types */

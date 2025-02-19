@@ -23,7 +23,7 @@
 extern "C" {
 #endif
 
-BOOL WINAPI WaitOnAddress(volatile void*, void*, SIZE_T, DWORD);
+BOOL WINAPI WaitOnAddress(void*, void*, SIZE_T, DWORD);
 void WINAPI WakeByAddressAll(void*);
 void WINAPI WakeByAddressSingle(void*);
 

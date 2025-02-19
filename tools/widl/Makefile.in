@@ -1,16 +1,22 @@
 PROGRAMS = widl
 PARENTSRC = ../wrc
 
+UNIX_LIBS = parser.yy parser.tab ppl.yy ppy.tab
+
 SOURCES = \
 	attribute.c \
 	client.c \
 	expr.c \
 	hash.c \
 	header.c \
-	parser.l \
-	parser.y \
-	ppl.l \
-	ppy.y \
+#	parser.l \
+#	parser.y \
+    parser.yy.c \
+	parser.tab.c \
+#	ppl.l \
+#	ppy.y \
+	ppl.yy.c \
+	ppy.tab.c \
 	proxy.c \
 	register.c \
 	server.c \

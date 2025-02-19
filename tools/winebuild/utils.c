@@ -145,7 +145,11 @@ static const char *find_binary( const char *prefix, const char *name )
     if (strchr( name, '/' )) return name;
     if (!prefix) prefix = "";
     for (i = 0; i < dirs.count; i++) maxlen = max( maxlen, strlen(dirs.str[i]) + 2 );
-    file = xmalloc( maxlen + strlen(prefix) + strlen(name) + sizeof(EXEEXT) + 1 );
+    size_t memsize = maxlen + strlen(prefix) + strlen(name) + 1;
+#if defined(EXEEXT)
+    memsize += sizeof(EXEEXT);
+#endif
+    file = xmalloc( memsize );
 
     for (i = 0; i < dirs.count; i++)
     {
@@ -160,7 +164,9 @@ static const char *find_binary( const char *prefix, const char *name )
             *p++ = '-';
         }
         strcpy( p, name );
-        strcat( p, EXEEXT );
+#if defined(EXEEXT)
+        strcat( p, EXEEXT )
+#endif
         if (!stat( file, &st ) && S_ISREG(st.st_mode) && (st.st_mode & 0111)) return file;
     }
     free( file );

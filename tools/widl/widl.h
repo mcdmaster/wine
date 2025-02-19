@@ -22,9 +22,11 @@
 #define __WIDL_WIDL_H
 
 #include "../tools.h"
+#include "../wrc/wpp_private.h"
 #include "widltypes.h"
 
 #include <time.h>
+#include <stdio.h>
 
 extern int debuglevel;
 #define DEBUGLEVEL_NONE		0x0000

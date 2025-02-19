@@ -20,7 +20,10 @@
 #pragma makedep install
 #endif
 
-#include <xmldomdid.h>
+#define CONTEXT_FULL CONTEXT_AMD64_FULL
+#define __APPLE__   1
+#define _WCHAR_T_DEFINED
+#include <oaidl.h>
 #include <idispids.h>
 
 #if !defined(progid) && !defined(__WIDL__)
@@ -77,8 +80,7 @@ oleautomation,
 uuid(2933bf80-7b36-11d2-b20e-00c04f983e60),
 pointer_default(unique)
 ]
-interface IXMLDOMNode : IDispatch
-{
+interface IXMLDOMNode : IDispatch {
     [propget, id(DISPID_DOM_NODE_NODENAME)]
     HRESULT nodeName( [out,retval] BSTR *name );
 

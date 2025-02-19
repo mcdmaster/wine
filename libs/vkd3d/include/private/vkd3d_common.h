@@ -22,7 +22,7 @@
 #include "config.h"
 #define WIN32_LEAN_AND_MEAN
 #include "windows.h"
-#include "libs/vkd3d/include/vkd3d_types.h"
+#include "../../libs/vkd3d/include/vkd3d_types.h"
 
 #include <ctype.h>
 #include <limits.h>
