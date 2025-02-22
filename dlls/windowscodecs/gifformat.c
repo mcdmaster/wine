@@ -533,7 +533,7 @@ static IStream *create_stream(const void *data, int data_size)
     return FAILED(hr) ? NULL : stream;
 }
 
-static HRESULT create_metadata_reader(const void *data, int data_size,
+static HRESULT create_gif_metadata_reader(const void *data, int data_size,
                                       class_constructor constructor,
                                       IWICMetadataReader **reader)
 {
@@ -837,7 +837,7 @@ static HRESULT WINAPI GifFrameDecode_GetMetadataQueryReader(IWICBitmapFrameDecod
     if (!ppIMetadataQueryReader)
         return E_INVALIDARG;
 
-    return MetadataQueryReader_CreateInstance(&This->IWICMetadataBlockReader_iface, NULL, ppIMetadataQueryReader);
+    return MetadataQueryReader_CreateInstanceFromBlockReader(&This->IWICMetadataBlockReader_iface, ppIMetadataQueryReader);
 }
 
 static HRESULT WINAPI GifFrameDecode_GetColorContexts(IWICBitmapFrameDecode *iface,
@@ -998,7 +998,7 @@ static HRESULT WINAPI GifFrameDecode_Block_GetReaderByIndex(IWICMetadataBlockRea
         data_size = ext->ByteCount;
     }
 
-    return create_metadata_reader(data, data_size, constructor, reader);
+    return create_gif_metadata_reader(data, data_size, constructor, reader);
 }
 
 static HRESULT WINAPI GifFrameDecode_Block_GetEnumerator(IWICMetadataBlockReader *iface,
@@ -1216,7 +1216,7 @@ static HRESULT WINAPI GifDecoder_GetMetadataQueryReader(IWICBitmapDecoder *iface
 
     if (!ppIMetadataQueryReader) return E_INVALIDARG;
 
-    return MetadataQueryReader_CreateInstance(&This->IWICMetadataBlockReader_iface, NULL, ppIMetadataQueryReader);
+    return MetadataQueryReader_CreateInstanceFromBlockReader(&This->IWICMetadataBlockReader_iface, ppIMetadataQueryReader);
 }
 
 static HRESULT WINAPI GifDecoder_GetPreview(IWICBitmapDecoder *iface,
@@ -1354,7 +1354,7 @@ static HRESULT WINAPI GifDecoder_Block_GetReaderByIndex(IWICMetadataBlockReader 
     if (!reader) return E_INVALIDARG;
 
     if (index == 0)
-        return create_metadata_reader(This->LSD_data, sizeof(This->LSD_data),
+        return create_gif_metadata_reader(This->LSD_data, sizeof(This->LSD_data),
                                       LSDReader_CreateInstance, reader);
 
     for (i = 0; i < This->gif->Extensions.ExtensionBlockCount; i++)
@@ -1370,7 +1370,7 @@ static HRESULT WINAPI GifDecoder_Block_GetReaderByIndex(IWICMetadataBlockReader 
         else
             constructor = UnknownMetadataReader_CreateInstance;
 
-        return create_metadata_reader(This->gif->Extensions.ExtensionBlocks[i].Bytes,
+        return create_gif_metadata_reader(This->gif->Extensions.ExtensionBlocks[i].Bytes,
                                       This->gif->Extensions.ExtensionBlocks[i].ByteCount,
                                       constructor, reader);
     }
@@ -2098,7 +2098,7 @@ static HRESULT WINAPI GifFrameEncode_GetMetadataQueryWriter(IWICBitmapFrameEncod
     if (!encode->initialized)
         return WINCODEC_ERR_NOTINITIALIZED;
 
-    return MetadataQueryWriter_CreateInstance(&encode->IWICMetadataBlockWriter_iface, NULL, writer);
+    return MetadataQueryWriter_CreateInstanceFromBlockWriter(&encode->IWICMetadataBlockWriter_iface, writer);
 }
 
 static const IWICBitmapFrameEncodeVtbl GifFrameEncode_Vtbl =

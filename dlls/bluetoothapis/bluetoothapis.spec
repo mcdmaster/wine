@@ -1,7 +1,7 @@
 @ stub BluetoothAddressToString
 @ stub BluetoothDisconnectDevice
-@ stub BluetoothEnableDiscovery
-@ stub BluetoothEnableIncomingConnections
+@ stdcall BluetoothEnableDiscovery(ptr long)
+@ stdcall BluetoothEnableIncomingConnections(ptr long)
 @ stub BluetoothEnumerateInstalledServices
 @ stub BluetoothEnumerateInstalledServicesEx
 @ stub BluetoothEnumerateLocalServices
@@ -47,8 +47,8 @@
 @ stub BluetoothGetLocalServiceInfo
 @ stdcall BluetoothGetRadioInfo(ptr ptr)
 @ stub BluetoothGetServicePnpInstance
-@ stub BluetoothIsConnectable
-@ stub BluetoothIsDiscoverable
+@ stdcall BluetoothIsConnectable(ptr)
+@ stdcall BluetoothIsDiscoverable(ptr)
 @ stub BluetoothIsVersionAvailable
 @ stub BluetoothRegisterForAuthentication
 @ stdcall BluetoothRegisterForAuthenticationEx(ptr ptr ptr ptr)

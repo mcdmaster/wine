@@ -1444,8 +1444,23 @@ static void window_set_wm_state( struct x11drv_win_data *data, UINT new_state )
 
     data->desired_state.wm_state = new_state;
     if (!data->whole_window) return; /* no window, nothing to update */
-    if (data->wm_state_serial) return; /* another WM_STATE update is pending, wait for it to complete */
+    if (data->wm_state_serial && !data->current_state.wm_state != !data->pending_state.wm_state)
+        return; /* another map/unmap WM_STATE update is pending, wait for it to complete */
     if (old_state == new_state) return; /* states are the same, nothing to update */
+
+    /* When transitioning a window from IconicState to NormalState and the window is managed, go
+     * through WithdrawnState. This is needed because Mutter doesn't unmap windows when making
+     * windows iconic/minimized as Mutter needs to support live preview for minimized windows. So on
+     * Mutter, a window can be both iconic and mapped. If the window is mapped, then XMapWindow()
+     * will have no effect according to the  XMapWindow() documentation. Thus we have to transition
+     * to WithdrawnState first, then to NormalState */
+    if (data->managed && MAKELONG(old_state, new_state) == MAKELONG(IconicState, NormalState))
+    {
+        WARN( "window %p/%lx is iconic, remapping to workaround Mutter issues.\n", data->hwnd, data->whole_window );
+        window_set_wm_state( data, WithdrawnState );
+        window_set_wm_state( data, NormalState );
+        return;
+    }
 
     switch (MAKELONG(old_state, new_state))
     {
@@ -1603,7 +1618,7 @@ static UINT window_update_client_config( struct x11drv_win_data *data )
     else if (IsRectEmpty( &rect )) flags |= SWP_NOSIZE;
 
     /* don't sync win32 position for offscreen windows */
-    if (!is_window_rect_mapped( &new_rect )) flags |= SWP_NOMOVE;
+    if ((data->is_offscreen = !is_window_rect_mapped( &new_rect ))) flags |= SWP_NOMOVE;
 
     if ((flags & (SWP_NOSIZE | SWP_NOMOVE)) == (SWP_NOSIZE | SWP_NOMOVE)) return 0;
 
@@ -1780,7 +1795,7 @@ static void sync_window_position( struct x11drv_win_data *data, UINT swp_flags, 
     RECT new_rect, window_rect;
     BOOL above = FALSE;
 
-    if (data->managed && data->desired_state.wm_state == IconicState) return;
+    if (data->managed && ((style & WS_MINIMIZE) || data->desired_state.wm_state == IconicState)) return;
 
     if (!(swp_flags & SWP_NOZORDER) || (swp_flags & SWP_SHOWWINDOW))
     {
@@ -1801,8 +1816,8 @@ static void sync_window_position( struct x11drv_win_data *data, UINT swp_flags, 
 
     /* if the window has been moved offscreen by the window manager, we didn't tell the Win32 side about it */
     window_rect = window_rect_from_visible( old_rects, data->desired_state.rect );
-    if (!is_window_rect_mapped( &window_rect )) OffsetRect( &new_rect, window_rect.left - old_rects->window.left,
-                                                            window_rect.top - old_rects->window.top );
+    if (data->is_offscreen) OffsetRect( &new_rect, window_rect.left - old_rects->window.left,
+                                        window_rect.top - old_rects->window.top );
 
     window_set_config( data, &new_rect, above );
 }
@@ -2694,6 +2709,7 @@ void X11DRV_GetDC( HDC hdc, HWND hwnd, HWND top, const RECT *win_rect,
                    const RECT *top_rect, DWORD flags )
 {
     struct x11drv_escape_set_drawable escape;
+    struct x11drv_win_data *data;
 
     escape.code = X11DRV_SET_DRAWABLE;
     escape.mode = IncludeInferiors;
@@ -2704,19 +2720,18 @@ void X11DRV_GetDC( HDC hdc, HWND hwnd, HWND top, const RECT *win_rect,
     escape.dc_rect.right        = win_rect->right - top_rect->left;
     escape.dc_rect.bottom       = win_rect->bottom - top_rect->top;
 
-    if (top == hwnd)
+    if ((data = get_win_data( top )))
     {
-        struct x11drv_win_data *data = get_win_data( hwnd );
-
-        escape.drawable = data ? data->whole_window : X11DRV_get_whole_window( hwnd );
-
+        escape.drawable = data->whole_window;
+        escape.visual = data->vis;
         /* special case: when repainting the root window, clip out top-level windows */
-        if (data && data->whole_window == root_window) escape.mode = ClipByChildren;
+        if (top == hwnd && data->whole_window == root_window) escape.mode = ClipByChildren;
         release_win_data( data );
     }
     else
     {
         escape.drawable = X11DRV_get_whole_window( top );
+        escape.visual = default_visual; /* FIXME: use the right visual for other process window */
     }
 
     if (!escape.drawable) return; /* don't create a GC for foreign windows */
@@ -3255,15 +3270,6 @@ LRESULT X11DRV_WindowMessage( HWND hwnd, UINT msg, WPARAM wp, LPARAM lp )
         if ((data = get_win_data( hwnd )))
         {
             sync_window_region( data, (HRGN)1 );
-            release_win_data( data );
-        }
-        return 0;
-    case WM_WINE_DESKTOP_RESIZED:
-        if ((data = get_win_data( hwnd )))
-        {
-            /* update the full screen state */
-            update_net_wm_states( data );
-            window_set_config( data, &data->rects.visible, FALSE );
             release_win_data( data );
         }
         return 0;

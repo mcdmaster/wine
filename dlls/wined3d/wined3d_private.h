@@ -225,6 +225,7 @@ struct wined3d_d3d_info
     uint32_t shader_double_precision : 1;
     uint32_t shader_output_interpolation : 1;
     uint32_t viewport_array_index_any_shader : 1;
+    uint32_t simple_instancing : 1;
     uint32_t stencil_export : 1;
     /* If zero, only conditional NPOT textures are supported, via
      * WINED3D_GL_NORMALIZED_TEXRECT. */
@@ -1504,10 +1505,9 @@ struct vs_compile_args
     BYTE fog_src;
     BYTE clip_enabled : 1;
     BYTE point_size : 1;
-    BYTE per_vertex_point_size : 1;
     BYTE flatshading : 1;
     BYTE next_shader_type : 3;
-    BYTE padding : 1;
+    BYTE padding : 2;
 };
 
 struct ds_compile_args
@@ -2317,10 +2317,34 @@ enum wined3d_pci_device
     CARD_NVIDIA_GEFORCE_RTX2070     = 0x1f07,
     CARD_NVIDIA_GEFORCE_RTX2080     = 0x1e87,
     CARD_NVIDIA_GEFORCE_RTX2080TI   = 0x1e07,
-    CARD_NVIDIA_GEFORCE_RTX3070     = 0x249d,
-    CARD_NVIDIA_GEFORCE_RTX3080     = 0x2206,
+    CARD_NVIDIA_GEFORCE_RTX3050     = 0x2507,
+    CARD_NVIDIA_GEFORCE_RTX3060     = 0x2544,
+    CARD_NVIDIA_GEFORCE_RTX3060_LHR = 0x2504,
+    CARD_NVIDIA_GEFORCE_RTX3060TI_GA103 = 0x2414,
+    CARD_NVIDIA_GEFORCE_RTX3060TI_GA104 = 0x2486,
+    CARD_NVIDIA_GEFORCE_RTX3060TI_GA104_LHR = 0x2489,
+    CARD_NVIDIA_GEFORCE_RTX3070     = 0x2484,
+    CARD_NVIDIA_GEFORCE_RTX3070_LHR = 0x2488,
+    CARD_NVIDIA_GEFORCE_RTX3070_MOBILE = 0x249d,
+    CARD_NVIDIA_GEFORCE_RTX3070TI   = 0x2482,
+    CARD_NVIDIA_GEFORCE_RTX3080_10GB = 0x2206,
+    CARD_NVIDIA_GEFORCE_RTX3080_10GB_LHR = 0x2216,
+    CARD_NVIDIA_GEFORCE_RTX3080_12GB = 0x220a,
+    CARD_NVIDIA_GEFORCE_RTX3080TI   = 0x2208,
+    CARD_NVIDIA_GEFORCE_RTX3090     = 0x2204,
+    CARD_NVIDIA_GEFORCE_RTX3090TI   = 0x2203,
     CARD_NVIDIA_TESLA_T4            = 0x1eb8,
     CARD_NVIDIA_AMPERE_A10          = 0x2236,
+    CARD_NVIDIA_GEFORCE_RTX4060     = 0x2882,
+    CARD_NVIDIA_GEFORCE_RTX4060TI8G = 0x2803,
+    CARD_NVIDIA_GEFORCE_RTX4060TI16G = 0x2805,
+    CARD_NVIDIA_GEFORCE_RTX4070     = 0x2786,
+    CARD_NVIDIA_GEFORCE_RTX4070SUPER = 0x2783,
+    CARD_NVIDIA_GEFORCE_RTX4070TI   = 0x2782,
+    CARD_NVIDIA_GEFORCE_RTX4070TISUPER = 0x2705,
+    CARD_NVIDIA_GEFORCE_RTX4080     = 0x2704,
+    CARD_NVIDIA_GEFORCE_RTX4080SUPER = 0x2702,
+    CARD_NVIDIA_GEFORCE_RTX4090     = 0x2684,
 
     CARD_REDHAT_VIRGL               = 0x1010,
 
@@ -2787,7 +2811,7 @@ struct wined3d_ffp_vs_constants
     struct wined3d_ffp_point_constants
     {
         float scale_const, scale_linear, scale_quad;
-        float padding; /* For the HLSL backend. */
+        float size;
     } point;
     struct wined3d_material material;
     float padding[3]; /* For the HLSL backend. */
@@ -2806,7 +2830,26 @@ struct wined3d_ffp_ps_constants
      * specular color. */
     struct wined3d_color specular_enable;
     struct wined3d_color color_key[2];
+    struct wined3d_ffp_bumpenv_constants
+    {
+        struct
+        {
+            float _00, _01, _10, _11;
+        } matrices[WINED3D_MAX_FFP_TEXTURES];
+        float lscale[WINED3D_MAX_FFP_TEXTURES];
+        float loffset[WINED3D_MAX_FFP_TEXTURES];
+    } bumpenv;
+
+    /* States not used by the HLSL pipeline. */
+    float alpha_test_ref;
+    float padding[3]; /* to align to 16 bytes */
 };
+
+/* Float/int/bool constants are bound to VKD3D_SHADER_D3DBC_*_CONSTANT_REGISTER
+ * which have the values 0/1/2 respectively.
+ * FFP uniform constants active even with shaders (e.g. alpha test ref) need to
+ * be additionally bound to a different slot. */
+#define WINED3D_FFP_CONSTANTS_EXTRA_REGISTER 3
 
 enum wined3d_push_constants
 {
@@ -3133,11 +3176,6 @@ struct wined3d_allocator_block *wined3d_allocator_allocate(struct wined3d_alloca
 void wined3d_allocator_cleanup(struct wined3d_allocator *allocator);
 bool wined3d_allocator_init(struct wined3d_allocator *allocator,
         size_t pool_count, const struct wined3d_allocator_ops *allocator_ops);
-
-static inline float wined3d_alpha_ref(const struct wined3d_state *state)
-{
-    return (state->render_states[WINED3D_RS_ALPHAREF] & 0xff) / 255.0f;
-}
 
 const char *wined3d_debug_resource_access(uint32_t access);
 const char *wined3d_debug_bind_flags(uint32_t bind_flags);
@@ -4087,10 +4125,6 @@ void state_clipping(struct wined3d_context *context,
         const struct wined3d_state *state, DWORD state_id);
 void clipplane(struct wined3d_context *context,
         const struct wined3d_state *state, DWORD state_id);
-void state_pointsprite_w(struct wined3d_context *context,
-        const struct wined3d_state *state, DWORD state_id);
-void state_pointsprite(struct wined3d_context *context,
-        const struct wined3d_state *state, DWORD state_id);
 void state_shademode(struct wined3d_context *context,
         const struct wined3d_state *state, DWORD state_id);
 
@@ -4445,6 +4479,7 @@ extern enum wined3d_format_id pixelformat_for_depth(DWORD depth);
 #define WINED3D_FORMAT_ATTR_HEIGHT_SCALE            0x00000200
 #define WINED3D_FORMAT_ATTR_MAPPABLE                0x00000400
 #define WINED3D_FORMAT_ATTR_CAST_TO_BLOCK           0x00000800
+#define WINED3D_FORMAT_ATTR_PLANAR                  0x00001000
 
 /* Pixel format capabilities */
 #define WINED3D_FORMAT_CAP_POSTPIXELSHADER_BLENDING     0x00000001
@@ -4512,6 +4547,9 @@ struct wined3d_format
     UINT block_width;
     UINT block_height;
     UINT block_byte_count;
+
+    enum wined3d_format_id plane_formats[2];
+    unsigned int uv_width, uv_height;
 
     enum wined3d_ffp_emit_idx emit_idx;
 
