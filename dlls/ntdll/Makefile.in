@@ -22,7 +22,6 @@ SOURCES = \
 	handletable.c \
 	heap.c \
 	large_int.c \
-	loader.c \
 	locale.c \
 	math.c \
 	misc.c \

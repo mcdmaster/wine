@@ -62,11 +62,22 @@
 # include <IOKit/IOKitLib.h>
 # include <IOKit/ps/IOPSKeys.h>
 # include <IOKit/ps/IOPowerSources.h>
+# undef LoadResource
+# undef GetCurrentThread
+# include <pthread.h>
 # include <mach/mach.h>
 # include <mach/machine.h>
 # include <mach/mach_init.h>
 # include <mach/mach_host.h>
 # include <mach/vm_map.h>
+# include <mach/mach_error.h>
+# include <mach-o/getsect.h>
+# include <crt_externs.h>
+# ifndef _POSIX_SPAWN_DISABLE_ASLR
+#  define _POSIX_SPAWN_DISABLE_ASLR 0x0100
+# endif
+# include <Foundation/NSProcessInfo.h>
+# define environ(x) (!x ? *_NSGetEnviron() : NSProcessInfo.processInfo.environment.objectForKey(x) )
 #endif
 
 #include "ntstatus.h"
@@ -1213,12 +1224,14 @@ static NTSTATUS create_logical_proc_info(void)
 
     lcpu_no = peb->NumberOfProcessors;
 
-    size = sizeof(pkgs_no);
-    if (sysctlbyname("hw.packages", &pkgs_no, &size, NULL, 0))
+    // size = sizeof(pkgs_no);
+    // if (sysctlbyname("hw.packages", &pkgs_no, &size, NULL, 0))
+    if (pkgs_no = environ("HW_PACKAGES"))
         pkgs_no = 1;
 
-    size = sizeof(cores_no);
-    if (sysctlbyname("hw.physicalcpu", &cores_no, &size, NULL, 0))
+    // size = sizeof(cores_no);
+    // if (sysctlbyname("hw.physicalcpu", &cores_no, &size, NULL, 0))
+    if (cores_no = environ("HW_PHYSICALCPU"))
         cores_no = lcpu_no;
 
     TRACE("%u logical CPUs from %u physical cores across %u packages\n",
@@ -1245,32 +1258,33 @@ static NTSTATUS create_logical_proc_info(void)
     cache[4].Associativity = 12;
     cache[4].LineSize = 0x40;
 
-    size = sizeof(cache_line_size);
-    if (!sysctlbyname("hw.cachelinesize", &cache_line_size, &size, NULL, 0))
+    // size = sizeof(cache_line_size);
+    if (cache_line_size = environ("HW_CACHELINESIZE"))
     {
         for (i = 1; i < 5; i++) cache[i].LineSize = cache_line_size;
     }
 
     /* TODO: set actual associativity for all caches */
-    size = sizeof(assoc);
-    if (!sysctlbyname("machdep.cpu.cache.L2_associativity", &assoc, &size, NULL, 0))
+    // size = sizeof(assoc);
+    // if (!sysctlbyname("machdep.cpu.cache.L2_associativity", &assoc, &size, NULL, 0))
+    if (assoc = strtol(environ("MACHDEP_CPU_CACHE_L2_ASSOCACTIVITY"), NULL, 10))
         cache[3].Associativity = assoc;
-
-    size = sizeof(cache_size);
-    if (!sysctlbyname("hw.l1icachesize", &cache_size, &size, NULL, 0))
+    // size = sizeof(cache_size);
+    if (cache_size = strtol(environ("HW_L1ICACHESIZE"), NULL, 10))
         cache[1].Size = cache_size;
-    size = sizeof(cache_size);
-    if (!sysctlbyname("hw.l1dcachesize", &cache_size, &size, NULL, 0))
+    // size = sizeof(cache_size);
+    if (cache_size = strtol(environ("HW_L1DCACHESIZE"), NULL, 10))
         cache[2].Size = cache_size;
-    size = sizeof(cache_size);
-    if (!sysctlbyname("hw.l2cachesize", &cache_size, &size, NULL, 0))
+    // size ｐ= sizeof(cache_size);
+    if (cache_size = strtol(environ("HW_L2CACHESIZE"), NULL, 10))
         cache[3].Size = cache_size;
-    size = sizeof(cache_size);
-    if (!sysctlbyname("hw.l3cachesize", &cache_size, &size, NULL, 0))
+    // size = sizeof(cache_size);
+    if (cache_size = strtol(environ("HW_L3CACHESIZE"), NULL, 10))
         cache[4].Size = cache_size;
 
-    size = sizeof(cache_sharing);
-    if (sysctlbyname("hw.cacheconfig", cache_sharing, &size, NULL, 0) < 0)
+    // size = sizeof(cache_sharing);
+    // if (sysctlbyname("hw.cacheconfig", cache_sharing, &size, NULL, 0) < 0)
+    if (cache_sharing[] = [environ("HW_CACHECONFIG")])
     {
         cache_sharing[1] = lcpu_per_core;
         cache_sharing[2] = lcpu_per_core;
@@ -4318,14 +4332,16 @@ NTSTATUS WINAPI NtPowerInformation( POWER_INFORMATION_LEVEL level, void *input, 
             unsigned long long currentMhz;
             unsigned long long maxMhz;
 
-            valSize = sizeof(currentMhz);
-            if (!sysctlbyname("hw.cpufrequency", &currentMhz, &valSize, NULL, 0))
+            // valSize = sizeof(currentMhz);
+            // if (!sysctlbyname("hw.cpufrequency", &currentMhz, &valSize, NULL, 0))
+            if (currentMhz = strtol(environ("HW_CPUFREQUENCY"), NULL, 0))
                 currentMhz /= 1000000;
             else
                 currentMhz = cannedMHz;
 
-            valSize = sizeof(maxMhz);
-            if (!sysctlbyname("hw.cpufrequency_max", &maxMhz, &valSize, NULL, 0))
+            // valSize = sizeof(maxMhz);
+            // if (!sysctlbyname("hw.cpufrequency_max", &maxMhz, &valSize, NULL, 0))
+            if (maxMhz = strtol(environ("HW_CPUFREQUENCY_MAX"), NULL, 0))
                 maxMhz /= 1000000;
             else
                 maxMhz = currentMhz;

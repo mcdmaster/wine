@@ -215,7 +215,7 @@ typedef unsigned int ULONG, *PULONG;
 
 typedef void                                   *LPVOID;
 typedef const void                             *LPCVOID;
-typedef int             BOOL,       *PBOOL,    *LPBOOL;
+// typedef int             BOOL,       *PBOOL,    *LPBOOL;
 typedef unsigned char   BYTE,       *PBYTE,    *LPBYTE;
 typedef unsigned short  WORD,       *PWORD,    *LPWORD;
 typedef int             INT,        *PINT,     *LPINT;

@@ -2529,7 +2529,7 @@ WINBASEAPI LPWSTR      WINAPI lstrcpynW(LPWSTR,LPCWSTR,INT);
 WINBASEAPI INT         WINAPI lstrlenA(LPCSTR);
 WINBASEAPI INT         WINAPI lstrlenW(LPCWSTR);
 
-#else
+#else /* __WINESRC__ */ 
 
 /* string functions without the exception handler */
 

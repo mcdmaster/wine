@@ -24,22 +24,11 @@
 #ifndef __WINE_CONFIG_H
 # error You must include config.h to use this header
 #endif
-
-#include <limits.h>
-#include <stdarg.h>
-#include <stdbool.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <signal.h>
-#include <fcntl.h>
-#include <time.h>
-#include <errno.h>
+/*
 #ifdef HAVE_SYS_SYSCTL_H
 # include <sys/sysctl.h>
 #endif
+*/
 #ifdef __APPLE__
 # include <mach-o/dyld.h>
 #endif
@@ -94,6 +83,18 @@ extern char **environ;
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
 #endif
 
+#include <limits.h>
+#include <stdarg.h>
+#include <stdbool.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <time.h>
+#include <errno.h>
+
 struct target
 {
     enum { CPU_i386, CPU_x86_64, CPU_ARM, CPU_ARM64, CPU_ARM64EC } cpu;
@@ -138,7 +139,7 @@ static inline void *xrealloc (void *ptr, size_t size)
 
 static inline char *xstrdup( const char *str )
 {
-    return strcpy( xmalloc( strlen(str)+1 ), str );
+    return strncpy( xmalloc( strlen(str) + 1 ), str, strlen(str) + 1 );
 }
 
 static inline bool strendswith( const char *str, const char *end )
@@ -179,18 +180,17 @@ struct strarray
 
 static const struct strarray empty_strarray;
 
-static inline void strarray_add( struct strarray *array, const char *str )
+static inline void strarray_add( struct strarray array, const char *str )
 {
-    if (array->count == array->size)
-    {
-	if (array->size) array->size *= 2;
-        else array->size = 16;
-	array->str = xrealloc( array->str, sizeof(array->str[0]) * array->size );
-    }
-    array->str[array->count++] = str;
+	array.count = array.size ? array.size * 2 : 16;
+    array.str = xrealloc( array.str, sizeof(array.str[0]) * array.count );
+    array.size = array.count;
+    array.str[array.count] = NULL;
+    array.str[array.count - 1] = str;
+    array.count = 0;
 }
 
-static inline void strarray_addall( struct strarray *array, struct strarray added )
+static inline void strarray_addall( struct strarray array, struct strarray added )
 {
     unsigned int i;
 
@@ -205,12 +205,12 @@ static inline bool strarray_exists( struct strarray array, const char *str )
     return false;
 }
 
-static inline void strarray_add_uniq( struct strarray *array, const char *str )
+static inline void strarray_add_uniq( struct strarray array, const char *str )
 {
-    if (!strarray_exists( *array, str )) strarray_add( array, str );
+    if (!strarray_exists( array, str )) strarray_add( array, str );
 }
 
-static inline void strarray_addall_uniq( struct strarray *array, struct strarray added )
+static inline void strarray_addall_uniq( struct strarray array, struct strarray added )
 {
     unsigned int i;
 
@@ -224,7 +224,7 @@ static inline struct strarray strarray_fromstring( const char *str, const char *
     const char *tok;
 
     for (tok = strtok( buf, delim ); tok; tok = strtok( NULL, delim ))
-        strarray_add( &array, xstrdup( tok ));
+        strarray_add( array, xstrdup( tok ));
     free( buf );
     return array;
 }
@@ -256,9 +256,9 @@ static inline char *strarray_tostring( struct strarray array, const char *sep )
     return str;
 }
 
-static inline void strarray_qsort( struct strarray *array, int (*func)(const char **, const char **) )
+static inline void strarray_qsort( struct strarray array, int (*func)(const char **, const char **) )
 {
-    if (array->count) qsort( array->str, array->count, sizeof(*array->str), (void *)func );
+    if (array.count) qsort( array.str, array.count, sizeof(array.str), (void *)func );
 }
 
 static inline const char *strarray_bsearch( struct strarray array, const char *str,
@@ -276,7 +276,7 @@ static inline void strarray_trace( struct strarray args )
 
     for (i = 0; i < args.count; i++)
     {
-        if (strpbrk( args.str[i], " \t\n\r")) printf( "\"%s\"", args.str[i] );
+        if (strchr( args.str[i], (int)(char *)" \t\n\r")) printf( "\"%s\"", args.str[i] );
         else printf( "%s", args.str[i] );
         if (i < args.count - 1) putchar( ' ' );
     }
@@ -286,13 +286,13 @@ static inline void strarray_trace( struct strarray args )
 static inline int strarray_spawn( struct strarray args )
 {
 #ifdef _WIN32
-    strarray_add( &args, NULL );
+    strarray_add( args, NULL );
     return _spawnvp( _P_WAIT, args.str[0], args.str );
 #else
     pid_t pid, wret;
     int status;
 
-    strarray_add( &args, NULL );
+    strarray_add( args, NULL );
     if (posix_spawnp( &pid, args.str[0], NULL, NULL, (char **)args.str, environ ))
         return -1;
 
@@ -417,18 +417,19 @@ static inline char *make_temp_file( const char *prefix, const char *suffix )
         fd = open( name, O_RDWR | O_CREAT | O_EXCL, 0600 );
         if (fd >= 0)
         {
-#ifdef HAVE_SIGPROCMASK /* block signals while manipulating the temp files list */
+#ifdef HAVE_SIGPROCMASK // block signals while manipulating the temp files list
             sigset_t mask_set, old_set;
-
+#if defined(HAVE_SIGNAL_H)
             sigemptyset( &mask_set );
             sigaddset( &mask_set, SIGHUP );
             sigaddset( &mask_set, SIGTERM );
             sigaddset( &mask_set, SIGINT );
             sigprocmask( SIG_BLOCK, &mask_set, &old_set );
-            strarray_add( &temp_files, name );
+            strarray_add( temp_files, name );
             sigprocmask( SIG_SETMASK, &old_set, NULL );
+#endif
 #else
-            strarray_add( &temp_files, name );
+            strarray_add( temp_files, name );
 #endif
             close( fd );
             return name;
@@ -875,13 +876,13 @@ static inline struct strarray parse_options( int argc, char **argv, const char *
     {
         if (argv[i][0] != '-' || !argv[i][1])  /* not an option */
         {
-            strarray_add( &ret, argv[i] );
+            strarray_add( ret, argv[i] );
             continue;
         }
         if (!strcmp( argv[i], "--" ))
         {
             /* add remaining args */
-            while (++i < argc) strarray_add( &ret, argv[i] );
+            while (++i < argc) strarray_add( ret, argv[i] );
             break;
         }
         start = argv[i] + 1 + (argv[i][1] == '-');

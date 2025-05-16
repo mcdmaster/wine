@@ -24,10 +24,16 @@
 
 #include "config.h"
 
+#include "wine/list.h"
+#include "wine/debug.h"
 #include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <stdarg.h>
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <inttypes.h>
 #include <stdio.h>
 #include <signal.h>
 #include <spawn.h>
@@ -73,7 +79,8 @@
 # ifndef _POSIX_SPAWN_DISABLE_ASLR
 #  define _POSIX_SPAWN_DISABLE_ASLR 0x0100
 # endif
-# define environ (*_NSGetEnviron())
+# include <Foundation/NSProcessInfo.h>
+# define environ(x) (!x ? *_NSGetEnviron() : NSProcessInfo.processInfo.environment.objectForKey(x) )
 #else
   extern char **environ;
 #endif
@@ -83,16 +90,9 @@
 
 #include "ntstatus.h"
 #define WIN32_NO_STATUS
-#include "windef.h"
-#include "winnt.h"
-#include "winbase.h"
-#include "winnls.h"
-#include "winioctl.h"
+#include "ntdef.h"
 #include "winternl.h"
-#include "unix_private.h"
-#include "wine/list.h"
-#include "ntsyscalls.h"
-#include "wine/debug.h"
+#include "dlls/ntdll/ntsyscalls.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(module);
 
@@ -111,9 +111,9 @@ void *pRtlUserThreadStart = NULL;
 void *p__wine_ctrl_routine = NULL;
 SYSTEM_DLL_INIT_BLOCK *pLdrSystemDllInitBlock = NULL;
 
-static void * const syscalls[] =
+static void (* const syscalls[])(void) =
 {
-#define SYSCALL_ENTRY(id,name,args) name,
+#define SYSCALL_ENTRY(id,name,args) (void (*)(void))name,
     ALL_SYSCALLS
 #undef SYSCALL_ENTRY
 };
@@ -177,18 +177,20 @@ static void set_max_limit( int limit )
         if (limit == RLIMIT_NOFILE)
         {
             unsigned int nlimit = 0;
-            size_t size;
+            // size_t size;
 
             /* On Leopard, setrlimit(RLIMIT_NOFILE, ...) fails on attempts to set
              * rlim_cur above OPEN_MAX (even if rlim_max > OPEN_MAX).
              *
              * In later versions it can be set to kern.maxfilesperproc (from
              * sysctl). In Big Sur and later it can be set to rlim_max. */
-            size = sizeof(nlimit);
-            if (sysctlbyname("kern.maxfilesperproc", &nlimit, &size, NULL, 0) != 0 || nlimit < OPEN_MAX)
-                rlimit.rlim_cur = OPEN_MAX;
+            // size = sizeof(nlimit);
+            int kernmaxfilesperproc = strtol(environ("KERN_MAXFILESPERPROC"), NULL, 10);
+            // if (sysctlbyname("kern.maxfilesperproc", &nlimit, &size, NULL, 0) != 0 || nlimit < OPEN_MAX)
+            if ( kernmaxfilesperproc && kernmaxfilesperproc > 0 )
+                rlimit.rlim_cur = min(kernmaxfilesperproc, OPEN_MAX);
             else
-                rlimit.rlim_cur = nlimit;
+                rlimit.rlim_cur = max(nlimit, OPEN_MAX);
 
             if (!setrlimit( limit, &rlimit ))
             {
@@ -296,7 +298,7 @@ static int build_path_and_exec( pid_t *pid, const char *dir, const char *name, c
     int ret;
 
     argv[0] = build_path( dir, name );
-    ret = posix_spawn( pid, argv[0], NULL, NULL, argv, environ );
+    ret = posix_spawn( pid, argv[0], NULL, NULL, argv, environ() );
     free( argv[0] );
     return ret;
 }
